@@ -28,6 +28,7 @@
 
 /** PUNTO DE ENTRADA. Planifica la semana configurada. */
 function planificarSemana(semana) {
+  _validarReplanificacion();
   semana = semana || cfg('SEMANA_PLANIFICACION') || semanaISO(new Date());
   var inicio = new Date();
   log('INFO', 'Planificador', 'Inicio de planificacion semana ' + semana);
@@ -54,7 +55,6 @@ function planificarSemana(semana) {
   _persistirPlan(contexto);
   calcularViaticos(semana);
   generarGastosPresupuestados(semana);
-  generarMaterialesDeOT();
   generarCapacitaciones();
   construirCalendario(semana);
   recalcularKPIs(semana);
@@ -77,6 +77,7 @@ function planificarSemana(semana) {
 
 /** Borra la planificacion previa de una semana sin tocar datos maestros. */
 function limpiarPlanificacion(semana) {
+  _validarReplanificacion();
   semana = semana || cfg('SEMANA_PLANIFICACION');
   [SH.OT, SH.ITINERARIO, SH.CUADRILLAS, SH.CALENDARIO, SH.MATERIALES, SH.CAPACITACION].forEach(function (h) {
     dbTruncar(h);
@@ -724,8 +725,6 @@ function _minutosViajePorModo(t, modo, decision) {
       return Math.round((decision.recomendado.horasViaje * 60) / 2);
     case MODOS.BUS:
       return Math.round(t.km / cfgNum('VEL_BUS_KMH') * 60 + 30);
-    case MODOS.UBER:
-      return Math.round(t.km / cfgNum('VEL_UBER_KMH') * 60);
     case MODOS.METRO_MICRO:
       return Math.round(t.km / cfgNum('VEL_TRANSPORTE_PUBLICO_KMH') * 60);
     default:
@@ -744,20 +743,14 @@ function _costearTramo(t, modo, nPasajeros, decision, vehiculo) {
                     (t.peaje ? ' + peajes ' + clp(t.peaje) : '') + '. Fuente distancia: ' + t.fuente + '.';
       break;
     case MODOS.AVION:
-      salida.pasajes = Math.round((decision.recomendado.detalle.pasajes || 0) / 2);
+      salida.pasajes = Math.round(decision.recomendado.costoDirecto / 2);
       salida.nota = 'Tramo aereo ' + (decision.recomendado.detalle.aerolinea || '') +
                     ', tarifa unitaria ida y vuelta ' + clp(decision.recomendado.detalle.tarifaUnitariaIdaVuelta || 0) +
                     ' (' + (decision.recomendado.detalle.fuenteTarifa || '') + ').';
       break;
     case MODOS.BUS:
-      salida.pasajes = Math.round(t.km * cfgNum('TARIFA_BUS_CLP_KM') * nPasajeros);
+      salida.pasajes = Math.round(t.km * cfgNum('TARIFA_BUS_CLP_KM') * nPasajeros + cfgNum('TARIFA_METRO_MICRO_VIAJE') * nPasajeros);
       salida.nota = nPasajeros + ' pasaje(s) de bus a ' + clp(cfgNum('TARIFA_BUS_CLP_KM')) + '/km.';
-      break;
-    case MODOS.UBER:
-      var minutos = t.km / cfgNum('VEL_UBER_KMH') * 60;
-      var autos = Math.ceil(nPasajeros / 4);
-      salida.pasajes = Math.round((cfgNum('UBER_TARIFA_BASE') + t.km * cfgNum('UBER_CLP_KM') + minutos * cfgNum('UBER_CLP_MIN')) * autos);
-      salida.nota = autos + ' auto(s) de aplicacion para ' + nPasajeros + ' tecnico(s).';
       break;
     case MODOS.METRO_MICRO:
       salida.pasajes = Math.round(cfgNum('TARIFA_METRO_MICRO_VIAJE') * nPasajeros);

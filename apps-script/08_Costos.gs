@@ -131,7 +131,7 @@ function calcularViaticos(semana) {
 
       var total = redondearArriba(
         (montoAlojamiento + montoViatico) * cfgNum('ANTICIPO_PORCENTAJE') +
-        fondoComb + fondoPeaje + holgura, 1000);
+        fondoComb + fondoPeaje + montoPasajes + holgura, 1000);
 
       filas.push({
         VIATICO_ID: dbNuevoId('VT'),
@@ -231,7 +231,6 @@ function generarGastosPresupuestados(semana) {
     agregar('PEAJE', tr.COSTO_PEAJE, 'Peajes tramo ' + tr.ORIGEN_NOMBRE + ' -> ' + tr.DESTINO_NOMBRE, 'TAG_EMPRESA');
     if (tr.MODO === MODOS.AVION) agregar('PASAJE_AEREO', tr.COSTO_PASAJES, 'Pasajes aereos ' + tr.ORIGEN_NOMBRE + ' -> ' + tr.DESTINO_NOMBRE, 'TARJETA_EMPRESA');
     if (tr.MODO === MODOS.BUS) agregar('PASAJE_BUS', tr.COSTO_PASAJES, 'Pasajes de bus ' + tr.ORIGEN_NOMBRE + ' -> ' + tr.DESTINO_NOMBRE, 'TARJETA_EMPRESA');
-    if (tr.MODO === MODOS.UBER) agregar('TRANSPORTE_APP', tr.COSTO_PASAJES, 'Auto de aplicacion ' + tr.ORIGEN_NOMBRE + ' -> ' + tr.DESTINO_NOMBRE, 'PERSONAL_REEMBOLSABLE');
     if (tr.MODO === MODOS.METRO_MICRO) agregar('TRANSPORTE_PUBLICO', tr.COSTO_PASAJES, 'Pasajes Red ' + tr.ORIGEN_NOMBRE + ' -> ' + tr.DESTINO_NOMBRE, 'EFECTIVO_VIATICO');
   });
 
@@ -359,6 +358,7 @@ function resumenTesoreria(semana) {
       noches: Number(v.NOCHES),
       alojamiento: Number(v.MONTO_ALOJAMIENTO),
       viatico: Number(v.MONTO_VIATICO),
+      pasajes: Number(v.MONTO_PASAJES),
       fondoRendir: Number(v.FONDO_COMBUSTIBLE) + Number(v.FONDO_PEAJES) + Number(v.HOLGURA),
       total: Number(v.TOTAL_TRANSFERIR)
     };

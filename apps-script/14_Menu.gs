@@ -7,6 +7,11 @@
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('CRM Servicio Tecnico')
+    .addItem('Preparar demostración (33 equipos)', 'prepararDemo')
+    .addItem('Abrir presentación', 'abrirPresentacion')
+    .addItem('Ver token para UI / AppSheet', 'verTokenIntegracion')
+    .addItem('Mostrar solo hojas de trabajo', 'aplicarVistaSimple')
+    .addItem('Mostrar hojas auxiliares', 'mostrarHojasAuxiliares')
     .addItem('1. Instalar / reparar estructura', 'instalarCRM')
     .addSeparator()
     .addSubMenu(ui.createMenu('2. Planificacion')

@@ -15,9 +15,10 @@ var APP = {
   TZ: 'America/Santiago',
   MONEDA: 'CLP',
   BASE_NOMBRE: 'INACAP Sede Santiago Sur',
-  BASE_DIRECCION: 'Av. Salvador Allende 4900, San Miguel, Region Metropolitana',
-  BASE_LAT: -33.5089,
-  BASE_LNG: -70.6531
+  BASE_DIRECCION: 'Av. Vicuña Mackenna 3864, Macul, Region Metropolitana',
+  // Coordenadas aproximadas para la demo; Maps puede geocodificar la dirección.
+  BASE_LAT: -33.4995,
+  BASE_LNG: -70.6168
 };
 
 /** Nombres canonicos de todas las hojas del libro. */
@@ -112,17 +113,11 @@ var CONFIG_DEFAULTS = [
   ['SALIDA_AEROPUERTO_MIN',          30,    'number', 'min',    'Retiro de equipaje y salida.', 'TRANSPORTE'],
   ['VEL_BUS_KMH',                    72,    'number', 'km/h',   'Velocidad media bus interurbano.', 'TRANSPORTE'],
   ['TARIFA_BUS_CLP_KM',              32,    'number', 'CLP/km', 'Tarifa referencial semi cama por km.', 'TRANSPORTE'],
-  ['FLETE_EQUIPO_CLP',               24000, 'number', 'CLP',    'Despacho por carga de un equipo a regiones.', 'TRANSPORTE'],
-  ['EQUIPOS_DESPACHADOS_POR_CARGA',  false, 'bool',   '',       'Si TRUE el avion es viable (no se lleva carga).', 'TRANSPORTE'],
   ['PESO_HORA_VIAJE_EN_DECISION',    1.0,   'number', 'factor', 'Peso del costo de oportunidad al elegir modo.', 'TRANSPORTE'],
 
   // --- Transporte urbano y menor (tecnico sin camioneta) -----------------
   ['TARIFA_METRO_MICRO_VIAJE',       900,   'number', 'CLP',    'Pasaje Red integrado por viaje.', 'TRANSPORTE'],
   ['VEL_TRANSPORTE_PUBLICO_KMH',     18,    'number', 'km/h',   'Velocidad puerta a puerta en metro/micro.', 'TRANSPORTE'],
-  ['UBER_TARIFA_BASE',               1500,  'number', 'CLP',    'Banderazo de app de transporte.', 'TRANSPORTE'],
-  ['UBER_CLP_KM',                    750,   'number', 'CLP/km', 'Tarifa variable por km.', 'TRANSPORTE'],
-  ['UBER_CLP_MIN',                   120,   'number', 'CLP/min','Tarifa variable por minuto.', 'TRANSPORTE'],
-  ['VEL_UBER_KMH',                   26,    'number', 'km/h',   'Velocidad media puerta a puerta en auto app.', 'TRANSPORTE'],
 
   // --- Dimensionamiento de cuadrilla (flexible) -------------------------
   ['CUADRILLA_MIN',                  1,     'number', 'tec',    'Minimo de tecnicos por despacho.', 'CUADRILLA'],
@@ -132,12 +127,6 @@ var CONFIG_DEFAULTS = [
   ['MIN_DUPLA_SOBRE_EQUIPOS',        3,     'number', 'equipos','Sobre esta carga de sitio se exigen 2 tecnicos.', 'CUADRILLA'],
 
   // --- Carga fisica (define si cabe transporte publico) ------------------
-  ['EQUIPO_PESO_KG',                 18,    'number', 'kg',     'Peso de un equipo embalado.', 'CARGA'],
-  ['HERRAMIENTAS_PESO_KG',           12,    'number', 'kg',     'Maletin de herramientas del tecnico.', 'CARGA'],
-  ['PESO_MAX_TRANSPORTE_PUBLICO_KG', 25,    'number', 'kg',     'Tope razonable en metro/micro por persona.', 'CARGA'],
-  ['PESO_MAX_UBER_KG',               60,    'number', 'kg',     'Tope razonable en auto de app.', 'CARGA'],
-  ['EQUIPAJE_AVION_INCLUIDO_KG',     23,    'number', 'kg',     'Equipaje facturado incluido por pasajero.', 'CARGA'],
-  ['COSTO_EQUIPAJE_EXTRA_CLP',       35000, 'number', 'CLP',    'Pieza adicional facturada en avion.', 'CARGA'],
 
   // --- Comercial ---------------------------------------------------------
   ['VALOR_SERVICIO_INSTALACION',     180000, 'number', 'CLP',   'Precio de venta por equipo instalado.', 'COMERCIAL'],
@@ -185,7 +174,7 @@ function _cargarConfig() {
   var hoja = libro().getSheetByName(SH.CONFIG);
   if (!hoja) return {};
   var datos = hoja.getDataRange().getValues();
-  var mapa = {};
+  var mapa = JSON.parse(PropertiesService.getScriptProperties().getProperty('CONFIG_AVANZADA') || '{}');
   for (var i = 1; i < datos.length; i++) {
     var clave = String(datos[i][0] || '').trim();
     if (!clave) continue;
@@ -200,6 +189,14 @@ function _cargarConfig() {
 
 /** Escribe una clave de CONFIG y limpia el cache. */
 function setCfg(clave, valor) {
+  if (CONFIG_BASICA.indexOf(clave) === -1) {
+    var props = PropertiesService.getScriptProperties();
+    var avanzada = JSON.parse(props.getProperty('CONFIG_AVANZADA') || '{}');
+    avanzada[clave] = valor;
+    props.setProperty('CONFIG_AVANZADA', JSON.stringify(avanzada));
+    _configCache = null;
+    return true;
+  }
   var hoja = libro().getSheetByName(SH.CONFIG);
   var datos = hoja.getDataRange().getValues();
   for (var i = 1; i < datos.length; i++) {

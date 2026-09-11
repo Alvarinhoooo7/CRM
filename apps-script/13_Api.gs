@@ -19,7 +19,7 @@ function doGet(e) {
   var p = (e && e.parameter) ? e.parameter : {};
 
   // Sin accion: se sirve el dashboard.
-  if (!p.accion) return _servirHtml('Index', 'Panel de Control - ' + APP.NOMBRE, p);
+  if (!p.accion) return _servirHtml('Presentacion', 'Planificacion - ' + APP.NOMBRE, p);
   if (p.accion === 'tecnico') return _servirHtml('Tecnico', 'Mi Ruta - ' + APP.NOMBRE, p);
 
   if (!_tokenValido(p.token)) return _json({ ok: false, error: 'Token invalido.' }, 401);

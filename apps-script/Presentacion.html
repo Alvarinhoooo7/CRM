@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <base target="_top">
+  <style>
+    :root{font:15px/1.5 system-ui,sans-serif;color:#183449;background:#f1f5f8}*{box-sizing:border-box}body{margin:0}
+    header{padding:25px 5%;background:#12364a;color:white}h1{margin:0;font-size:26px}h2{font-size:20px;margin:0 0 12px}p{margin:8px 0 15px}
+    main{max-width:1250px;margin:auto;padding:24px}nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
+    button{font:inherit;border:1px solid #c6d6df;border-radius:9px;background:white;color:#183449;padding:10px 15px;cursor:pointer}button.primary,nav button[aria-selected=true]{background:#087b77;color:white;border-color:#087b77}button:disabled{opacity:.5;cursor:wait}
+    input,select,textarea{font:inherit;padding:10px;border:1px solid #b9cdd8;border-radius:7px;width:100%;background:white}input[type=checkbox]{width:auto}label{display:block;margin:10px 0}
+    .panel,.card{background:white;border:1px solid #dce5eb;border-radius:12px;padding:20px;margin-bottom:16px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card strong{display:block;font-size:26px}.muted,small{color:#566b79}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #e0e8ed;vertical-align:top}th{font-size:12px;color:#566b79}a{color:#067a77}.pill{background:#e1f3ee;color:#0d665e;border-radius:8px;padding:3px 7px;white-space:nowrap}.notice{padding:12px;background:#fff4d6;border-radius:8px}#status{position:sticky;top:0;z-index:2;background:#e1f3ee;padding:12px;border-radius:8px;margin-bottom:16px}section[hidden]{display:none}details{margin:12px 0}summary{cursor:pointer;font-weight:600}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    @media(max-width:750px){main{padding:14px}.cards,.grid{grid-template-columns:1fr 1fr}header{padding:20px}.grid{grid-template-columns:1fr}.card strong{font-size:22px}}
+  </style>
+</head>
+<body>
+<header><small style="color:#a3dcd3">DEMOSTRACIÓN · SERVICIO TÉCNICO</small><h1>Planifica, coordina y sigue cada instalación</h1><p id="base">Base: INACAP Santiago Sur · Av. Vicuña Mackenna 3864, Macul</p></header>
+<main>
+  <div id="status" role="status" aria-live="polite">Cargando operación…</div>
+  <div class="actions"><button class="primary" onclick="planificar()">Planificar / actualizar presupuesto</button><button onclick="cargar()">Actualizar vista</button><span id="semana"></span></div>
+  <details><summary>Acceso de coordinación</summary><p>Para guardar cambios o registrar avances, copie el token desde el menú del libro «Ver token para UI / AppSheet».</p><label>Token <input id="token" type="password" autocomplete="off" placeholder="Pegar token de coordinación"></label><small>Se mantiene solo mientras esta página está abierta. No es una cuenta individual de técnico.</small></details>
+  <nav aria-label="Secciones"><button aria-selected="true" onclick="tab('resumen',this)">1. Operación</button><button aria-selected="false" onclick="tab('rutas',this)">2. Direcciones y Maps</button><button aria-selected="false" onclick="tab('presupuesto',this)">3. Presupuesto</button><button aria-selected="false" onclick="tab('tecnico',this)">4. Técnico</button><button aria-selected="false" onclick="tab('ajustes',this)">Ajustes</button></nav>
+  <section id="resumen">
+    <div class="cards" id="cards"></div>
+    <div class="panel"><h2>Instalación y capacitación en 16 localidades</h2><p class="notice">Datos de demostración. Las direcciones iniciales, pasajes, hoteles y peajes son referenciales. Confirme los sitios en Maps antes de presentar un presupuesto real.</p><div class="scroll" id="requerimientos"></div></div>
+    <div class="panel"><h2>Decisiones de planificación</h2><div id="decisiones"></div><p><strong>Mejora propuesta:</strong> agrupar visitas por zona y registrar tiempos reales antes de ampliar la dotación. Comparar bus y avión para el norte y Biobío; micro/metro para las visitas urbanas. Mantener las camionetas disponibles como alternativa para circuitos con varios sitios.</p><p>Si se repiten servicios sin asignar por falta de horas, evaluar apoyo técnico temporal. Si faltan vehículos con técnicos disponibles, comparar arriendo puntual con compra. Una sola operación de 33 equipos no justifica por sí sola comprar otra camioneta.</p></div>
+  </section>
+  <section id="rutas" hidden>
+    <div class="panel"><h2>¿Dónde se realizará la instalación?</h2><p>Seleccione la localidad, escriba calle, número, comuna y Chile. Google Maps calculará la ruta por carretera desde la base y el regreso por separado.</p>
+      <label>Localidad <select id="destino" onchange="elegirDestino()"></select></label>
+      <label>Dirección exacta o coordenadas <input id="direccion" placeholder="Ej.: Los Carrera 1234, Copiapó, Chile" oninput="invalidarPreview()"></label>
+      <button class="primary" onclick="calcularRuta()">Calcular ruta con Google Maps</button><div id="preview"></div>
+      <details><summary>Comparar transportes para esta localidad</summary><div class="grid"><label>Técnicos <input id="compararTecnicos" type="number" min="1" max="10" value="2"></label><label>Días en destino <input id="compararDias" type="number" min="1" max="10" value="1"></label></div><button onclick="comparar()">Comparar camioneta, avión, bus y micro/metro</button><div id="comparativa"></div></details>
+      <p class="muted">Kilómetros de carretera y duración estimada por Google; no incluye tráfico en vivo. Los tiempos de bus, micro, metro y avión del plan se estiman por separado. Los peajes no son una cotización de Maps.</p>
+    </div>
+    <details class="panel"><summary>Conexión Google Maps</summary><p id="mapsEstado"></p><p>Puede usar el servicio Maps de Apps Script sin ingresar una clave, sujeto a cuota. Si tiene Google Cloud con Routes API habilitada, ingrese su clave aquí.</p><label>Clave de Routes API <input type="password" id="mapsKey" autocomplete="off" placeholder="Opcional"></label><button onclick="guardarMaps()">Guardar conexión</button><small>Una clave vacía selecciona Maps de Apps Script. Las claves se guardan en el servidor y no se muestran.</small></details>
+  </section>
+  <section id="presupuesto" hidden><div class="cards" id="caja"></div><div class="panel"><h2>Transferencias propuestas por técnico y despacho</h2><p>Incluye alojamiento, colación, pasajes, combustible, peajes y reserva. Son montos calculados; esta aplicación no realiza transferencias bancarias.</p><div class="scroll" id="transferencias"></div></div><div class="panel"><h2>Trayectos y horarios</h2><div class="scroll" id="itinerario"></div></div></section>
+  <section id="tecnico" hidden><div class="panel"><h2>Inicio y término de instalación</h2><p>Vista de demostración del flujo para AppSheet. Cada orden corresponde a un técnico e incluye su capacitación. Se muestran las órdenes del plan, aunque sean de otro día.</p><label>Técnico <select id="persona" onchange="renderOT()"></select></label><label><input id="capacitacion" type="checkbox"> Confirmo que realicé la capacitación de la orden que voy a terminar</label><div id="ordenes"></div></div></section>
+  <section id="ajustes" hidden><div class="panel"><h2>Solo lo necesario para simular</h2><p>Guardar ajustes no cambia el plan existente. Pulse «Planificar / actualizar presupuesto» para aplicar los nuevos valores a la agenda y viáticos. La cantidad de equipos se edita en REQUERIMIENTOS; personal y vehículos en sus hojas auxiliares.</p><div class="grid" id="config"></div><button class="primary" onclick="guardarConfig()">Guardar ajustes</button><p class="muted">Pesos, fletes y costos de materiales están fuera de alcance. Los demás supuestos técnicos permanecen en el código o en propiedades avanzadas.</p></div></section>
+</main>
+<script>
+  let data, previewId='';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money=v=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(Number(v)||0);
+  const num=v=>new Intl.NumberFormat('es-CL',{maximumFractionDigits:1}).format(Number(v)||0);
+  const date=v=>v?new Date(v).toLocaleString('es-CL',{timeZone:'America/Santiago',dateStyle:'short',timeStyle:'short'}):'—';
+  function status(s,error=false){$('status').textContent=s;$('status').style.background=error?'#ffe1de':'#e1f3ee'}
+  function busy(value){document.querySelectorAll('button').forEach(b=>b.disabled=value)}
+  function failure(e){busy(false);status(e.message||String(e),true)}
+  function table(head,rows){return rows.length?'<table><thead><tr>'+head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table>':'<p class="muted">Sin datos todavía. Ejecute prepararDemo desde Apps Script.</p>'}
+  function cards(id,items){$(id).innerHTML=items.map(([label,value])=>'<div class="card"><small>'+esc(label)+'</small><strong>'+esc(value)+'</strong></div>').join('')}
+  function tab(id,button){document.querySelectorAll('main>section').forEach(s=>s.hidden=s.id!==id);document.querySelectorAll('nav button').forEach(b=>b.setAttribute('aria-selected',String(b===button)))}
+  function cargar(message){busy(true);google.script.run.withSuccessHandler(d=>{data=d;render();busy(false);status(message||'Operación cargada. Revise las direcciones y el presupuesto.');}).withFailureHandler(failure).apiPresentacion()}
+  function accion(name,payload,success){const token=$('token').value.trim();if(!token){status('Pegue el token en Acceso de coordinación.',true);$('token').closest('details').open=true;$('token').focus();return}busy(true);status('Procesando…');google.script.run.withSuccessHandler(r=>{busy(false);if(r&&r.ok===false){status(r.mensaje,true);return}success(r)}).withFailureHandler(failure).apiAccionPresentacion(token,name,payload)}
+  function render(){
+    $('semana').textContent='Semana '+data.semana;
+    const t=data.tesoreria, total=data.requerimientos.reduce((s,r)=>s+Number(r.equipos),0),assigned=data.ot.reduce((s,o)=>s+Number(o.EQUIPOS),0);
+    cards('cards',[['Equipos solicitados',total],['Localidades',data.requerimientos.length],['Equipos en el plan',assigned],['Dinero a transferir',money(t.totalTransferir)]]);
+    $('requerimientos').innerHTML=table(['Localidad','Equipos + capacitación','Dirección','Desde la base','Fuente'],data.requerimientos.map(r=>[esc(r.comuna),esc(r.equipos),esc(r.direccion),num(r.km)+' km · '+num(r.minutos)+' min',esc(r.fuente)]));
+    $('decisiones').innerHTML='<p>'+assigned+' de '+total+' equipos planificados. '+Math.max(0,total-assigned)+' sin asignación.</p>'+data.cuadrillas.map(c=>'<details><summary>'+esc(c.NOMBRE)+' · '+esc(c.MODO_TRANSPORTE)+'</summary><p>'+esc(c.JUSTIFICACION_MODO||'Revise trayectos y presupuesto del despacho.')+'</p></details>').join('');
+    cards('caja',[['Alojamiento',money(t.totalAlojamiento)],['Colación',money(t.totalViaticos)],['Pasajes y movilidad',money(t.totalPasajes)],['Combustible, peajes y reserva',money(t.totalFondos)]]);
+    $('transferencias').innerHTML=table(['Técnico / despacho','Días / noches','Estadía','Colación','Pasajes','Fondo','Total'],t.tecnicos.map(v=>[esc(v.nombre)+'<br><small>'+esc(v.cuadrilla)+'</small>',num(v.dias)+' / '+num(v.noches),money(v.alojamiento),money(v.viatico),money(v.pasajes),money(v.fondoRendir),'<strong>'+money(v.total)+'</strong>']));
+    $('itinerario').innerHTML=table(['Trayecto','Modo','Salida / llegada','Km','Costo'],data.itinerario.map(r=>[esc(r.ORIGEN_NOMBRE)+' → '+esc(r.DESTINO_NOMBRE),esc(r.MODO),esc(date(r.HORA_SALIDA))+'<br>'+esc(date(r.HORA_LLEGADA)),num(r.KM),money(r.COSTO_TOTAL)]));
+    const selected=$('destino').value;$('destino').innerHTML=data.requerimientos.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.comuna)+' · '+esc(r.equipos)+' equipos</option>').join('');if(selected)$('destino').value=selected;elegirDestino();
+    const people=[...new Map(data.ot.map(o=>[o.TECNICO_ID,o.TECNICO_NOMBRE||o.TECNICO_ID])).entries()],person=$('persona').value;
+    $('persona').innerHTML=people.map(([id,name])=>'<option value="'+esc(id)+'">'+esc(name)+'</option>').join('');if(people.some(p=>p[0]===person))$('persona').value=person;renderOT();
+    $('config').innerHTML=data.configuracion.map(c=>'<label>'+esc(c.descripcion)+' ('+esc(c.unidad)+')<input data-config="'+esc(c.clave)+'" type="'+(c.clave==='SEMANA_PLANIFICACION'?'text':'number')+'" step="any" min="0" value="'+esc(c.valor)+'"></label>').join('');
+    $('mapsEstado').textContent=data.mapsConfigurado?'Conexión: Google Routes API con clave guardada.':'Conexión: servicio Maps de Apps Script, sin clave adicional.';
+  }
+  function invalidarPreview(){previewId='';$('preview').innerHTML=''}
+  function elegirDestino(){const r=data.requerimientos.find(r=>r.id===$('destino').value);$('direccion').value=r?r.direccion:'';$('comparativa').innerHTML='';invalidarPreview()}
+  function calcularRuta(){invalidarPreview();accion('ruta',{destinoId:$('destino').value,direccion:$('direccion').value},r=>{previewId=r.previewId;$('preview').innerHTML='<div class="notice"><p>Google encontró: '+esc(r.ida.direccion)+'</p><p>Ida: '+num(r.ida.km)+' km · '+num(r.ida.min)+' min. Regreso: '+num(r.vuelta.km)+' km · '+num(r.vuelta.min)+' min.</p><p>Fuente: '+esc(r.ida.fuente)+'. Peajes estimados.</p><a href="'+esc(r.mapa)+'" target="_blank" rel="noopener">Revisar ubicación en Google Maps ↗</a><p><button class="primary" onclick="confirmarRuta()">Confirmar punto y guardar ruta</button></p></div>';status('Revise el punto encontrado antes de confirmar.');})}
+  function confirmarRuta(){accion('guardarRuta',{previewId},r=>cargar(r.mensaje))}
+  function comparar(){const r=data.requerimientos.find(x=>x.id===$('destino').value),n=Number($('compararTecnicos').value),days=Number($('compararDias').value);if(!r||!Number.isInteger(n)||n<1||n>10||!Number.isInteger(days)||days<1||days>10){status('Ingrese entre 1 y 10 técnicos y días.',true);return}busy(true);status('Comparando transportes…');google.script.run.withSuccessHandler(c=>{busy(false);$('comparativa').innerHTML='<p>'+esc(c.justificacion)+'</p>'+table(['Transporte','Desembolso','Horas de viaje','Noches','Viabilidad'],c.opciones.map(o=>[esc(o.etiqueta),o.viable?money(o.costoCaja):'—',o.viable?num(o.horasViaje):'—',o.viable?num(o.nochesRequeridas):'—',esc(o.viable?'Disponible para simular':o.motivos.join(' '))]))+'<p class="muted">Comparación individual con tarifas y horarios estimados. Los circuitos de varias localidades se planifican por tierra.</p>';status('Comparación disponible; no se modificó el plan.');}).withFailureHandler(failure).apiComparadorTransporte(r.id,n,r.equipos,days)}
+  function guardarMaps(){accion('mapsKey',{key:$('mapsKey').value},r=>{$('mapsKey').value='';cargar(r.mensaje)})}
+  function guardarConfig(){const valores={};document.querySelectorAll('[data-config]').forEach(e=>valores[e.dataset.config]=e.value);accion('config',{valores},r=>cargar(r.mensaje))}
+  function planificar(){if(!confirm('Se reemplazará el plan simulado y se recalcularán los viáticos. Los planes con inicio, transferencia o rendición están protegidos. ¿Continuar?'))return;accion('planificar',{},r=>cargar('Plan actualizado: '+r.equipos+' equipos; '+r.misionesRechazadas+' misiones pendientes. '+(r.detalleRechazos||[]).join(' ')))}
+  function renderOT(){const orders=data.ot.filter(o=>o.TECNICO_ID===$('persona').value);$('ordenes').innerHTML=orders.map((o,i)=>'<article class="panel"><h2>'+esc(o.COMUNA)+' · '+esc(o.EQUIPOS)+' equipo(s)</h2><p>'+esc(date(o.HORA_INICIO_PLAN))+' · <span class="pill">'+esc(o.ESTADO)+'</span></p><p>Inicio real: '+esc(date(o.HORA_INICIO_REAL))+'<br>Término real: '+esc(date(o.HORA_FIN_REAL))+'</p>'+(['PLANIFICADA','ASIGNADA'].includes(o.ESTADO)?'<button class="primary" data-order="'+i+'" data-action="iniciarOT">Iniciar instalación</button>':o.ESTADO==='EN_EJECUCION'?'<button class="primary" data-order="'+i+'" data-action="finalizarOT">Terminar instalación y capacitación</button>':'')+'</article>').join('')||'<p>No hay órdenes para este técnico.</p>';$('ordenes').querySelectorAll('button').forEach(b=>b.onclick=()=>marcarOT(orders[Number(b.dataset.order)],b.dataset.action))}
+  function marcarOT(o,name){if(name==='finalizarOT'&&!$('capacitacion').checked){status('Confirme que realizó la capacitación antes de terminar.',true);return}accion(name,{otId:o.OT_ID,tecnicoId:o.TECNICO_ID,capacitacionOk:$('capacitacion').checked,realizada:true},r=>{$('capacitacion').checked=false;cargar(r.mensaje)})}
+  cargar();
+</script>
+</body>
+</html>

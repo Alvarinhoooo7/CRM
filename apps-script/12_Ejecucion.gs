@@ -121,6 +121,9 @@ function _minutosColacionDelDia(marcas) {
 function iniciarOT(otId, tecnicoId, lat, lng) {
   var ot = dbUno(SH.OT, { OT_ID: otId });
   if (!ot) return { ok: false, mensaje: 'OT inexistente.' };
+  if (tecnicoId !== ot.TECNICO_ID) return { ok: false, mensaje: 'La OT pertenece a otro tecnico.' };
+  if (ot.ESTADO === 'EN_EJECUCION') return { ok: true, mensaje: 'Inicio ya registrado.' };
+  if (ot.ESTADO !== 'PLANIFICADA' && ot.ESTADO !== 'ASIGNADA') return { ok: false, mensaje: 'Estado no permite iniciar.' };
   if (ot.ESTADO === 'COMPLETADA') return { ok: false, mensaje: 'La OT ya esta completada.' };
 
   var ahora = new Date();
@@ -142,7 +145,7 @@ function iniciarOT(otId, tecnicoId, lat, lng) {
     duracionEstimadaMin: Number(ot.DURACION_PLAN_MIN),
     horaFinEstimada: sumarMin(ahora, Number(ot.DURACION_PLAN_MIN)),
     equipos: Number(ot.EQUIPOS),
-    checklist: checklistCarga(ot.CUADRILLA_ID)
+    checklist: null
   };
 }
 
@@ -153,6 +156,10 @@ function iniciarOT(otId, tecnicoId, lat, lng) {
 function finalizarOT(datos) {
   var ot = dbUno(SH.OT, { OT_ID: datos.otId });
   if (!ot) return { ok: false, mensaje: 'OT inexistente.' };
+  if (datos.tecnicoId !== ot.TECNICO_ID) return { ok: false, mensaje: 'La OT pertenece a otro tecnico.' };
+  if (ot.ESTADO === 'COMPLETADA' || ot.ESTADO === 'NO_REALIZADA') return { ok: true, mensaje: 'Termino ya registrado.' };
+  if (ot.ESTADO !== 'EN_EJECUCION' || !ot.HORA_INICIO_REAL) return { ok: false, mensaje: 'Primero registre el inicio.' };
+  if (datos.realizada !== false && datos.capacitacionOk !== true) return { ok: false, mensaje: 'Confirme la capacitacion antes de completar.' };
 
   var ahora = new Date();
   var inicioReal = ot.HORA_INICIO_REAL ? new Date(ot.HORA_INICIO_REAL) : new Date(ot.HORA_INICIO_PLAN);
@@ -474,7 +481,7 @@ function panelTecnico(tecnicoId) {
       saldo: Number(viatico.SALDO_CLP),
       estado: viatico.ESTADO
     } : null,
-    materiales: cuadrillaId ? checklistCarga(cuadrillaId) : null,
+    materiales: null,
     horas: {
       semana: agenda.totalHoras, viaje: agenda.totalViaje,
       servicio: agenda.totalServicio, tope: agenda.topeLegal,

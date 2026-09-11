@@ -23,6 +23,8 @@ function instalarCRM() {
   sembrarConfig();
   var secretoGenerado = asegurarWebhookSecret();
   sembrarMaestros();      // 03_Seed.gs
+  simplificarConfiguracion();
+  aplicarVistaSimple();
   ordenarHojas(ss);
   eliminarHojaPorDefecto(ss);
   crearRangosNombrados(ss);
@@ -32,9 +34,9 @@ function instalarCRM() {
   var msg = 'CRM instalado.\n\n' +
             'Hojas nuevas: ' + (creadas.length ? creadas.join(', ') : 'ninguna (ya existian)') + '\n\n' +
             'Siguiente paso:\n' +
-            '1. Revise CONFIG y copie WEBHOOK_SECRET solo en AppSheet u otro integrador.\n' +
-            '2. Pegue sus API keys opcionales en CONFIG.\n' +
-            '3. Menu CRM > Planificar semana.';
+            '1. Menu CRM > Abrir presentacion.\n' +
+            '2. Menu CRM > Ver token para UI / AppSheet.\n' +
+            '3. Revise direcciones en Maps y pulse Planificar / actualizar presupuesto.';
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }
@@ -226,7 +228,6 @@ function aplicarFormatoCondicional(hoja, nombre, def, ultimaFila) {
     reglaTexto('MODO', 'AVION',       '#cfe2f3');
     reglaTexto('MODO', 'CAMIONETA',   '#d9ead3');
     reglaTexto('MODO', 'BUS',         '#fff2cc');
-    reglaTexto('MODO', 'UBER',        '#e6d0f7');
     reglaTexto('MODO', 'METRO_MICRO', '#d0e0e3');
     reglaTexto('LLEGADA_NOCTURNA', 'SI', '#fce5cd');
   }
@@ -249,7 +250,7 @@ function sembrarConfig() {
   for (var i = 1; i < datos.length; i++) {
     if (datos[i][0]) existentes[String(datos[i][0]).trim()] = true;
   }
-  var nuevas = CONFIG_DEFAULTS.filter(function (d) { return !existentes[d[0]]; });
+  var nuevas = CONFIG_DEFAULTS.filter(function (d) { return CONFIG_BASICA.indexOf(d[0]) !== -1 && !existentes[d[0]]; });
   if (nuevas.length) {
     hoja.getRange(hoja.getLastRow() + 1, 1, nuevas.length, 6).setValues(nuevas);
   }

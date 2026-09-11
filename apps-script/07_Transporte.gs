@@ -2,7 +2,7 @@
  * ============================================================================
  *  07_Transporte.gs  ·  Motor de decision del modo de traslado.
  * ============================================================================
- *  Responde: conviene camioneta, avion, bus, auto de app o metro/micro?
+ *  Responde: conviene camioneta, avion, bus, metro o micro?
  *
  *  El criterio NO es el costo de los pasajes: es el COSTO TOTAL DE LA MISION,
  *  que suma cuatro componentes que se mueven en direcciones opuestas:
@@ -22,7 +22,6 @@ var MODOS = {
   CAMIONETA: 'CAMIONETA',
   AVION: 'AVION',
   BUS: 'BUS',
-  UBER: 'UBER',
   METRO_MICRO: 'METRO_MICRO'
 };
 
@@ -53,12 +52,11 @@ function evaluarModosTransporte(mision) {
   var peajeRuta = peajeDeRuta(secuencia, true);
   var minRuta = _minutosDeRuta(secuencia, true);
 
-  var cargaKg = equipos * cfgNum('EQUIPO_PESO_KG') + n * cfgNum('HERRAMIENTAS_PESO_KG');
 
   var ctx = {
     destino: destino, n: n, equipos: equipos, dias: dias,
     kmRuta: kmRuta, peajeRuta: peajeRuta, minRuta: minRuta,
-    cargaKg: cargaKg, secuencia: secuencia,
+    secuencia: secuencia,
     hayVehiculo: mision.hayVehiculo !== false,
     hayConductor: mision.hayConductor !== false
   };
@@ -67,7 +65,6 @@ function evaluarModosTransporte(mision) {
     _evaluarCamioneta(ctx),
     _evaluarAvion(ctx),
     _evaluarBus(ctx),
-    _evaluarUber(ctx),
     _evaluarMetroMicro(ctx)
   ].filter(Boolean);
 
@@ -152,7 +149,7 @@ function _evaluarCamioneta(ctx) {
     o.motivos.push('Ningun tecnico del grupo tiene licencia vigente.');
   }
   if (o.viable) {
-    o.motivos.push('Transporta los ' + ctx.equipos + ' equipos y las herramientas sin flete adicional (' + redondear(ctx.cargaKg, 0) + ' kg).');
+    o.motivos.push('Autonomia para desplazarse entre sitios.');
     o.motivos.push('Da autonomia total en destino, sin depender de arriendos ni horarios.');
     if (horasViaje > 9) o.motivos.push('ALERTA: ' + horasLegibles(horasViaje) + ' de traslado consumen mas de una jornada completa.');
   }
@@ -173,7 +170,7 @@ function _evaluarAvion(ctx) {
   var iata = String(ctx.destino.AEROPUERTO_IATA || '').trim();
   var o = {
     modo: MODOS.AVION,
-    etiqueta: 'Avion + vehiculo arrendado en destino',
+    etiqueta: 'Avion + bus y micro en destino',
     viable: true,
     km: ctx.kmRuta,
     motivos: []
@@ -205,29 +202,16 @@ function _evaluarAvion(ctx) {
     Number(ctx.destino.KM_AEROPUERTO_DESTINO) / cfgNum('VEL_CARRETERA_KMH')
   );
 
-  // Movilidad en destino: se arrienda un vehiculo.
-  var arriendo = cfgNum('ARRIENDO_VEHICULO_DIA') * ctx.dias;
-  var kmLocales = Number(ctx.destino.KM_AEROPUERTO_DESTINO) * 2 + 60 * ctx.dias;
-  var combustibleLocal = Math.round(kmLocales / cfgNum('RENDIMIENTO_KM_LTS') * cfgNum('PRECIO_DIESEL_LTS'));
-  var trasladosSantiago = cfgNum('TRASLADO_AEROPUERTO_CLP') * 2;
-
-  // Carga: o se despacha por flete, o se paga equipaje adicional.
-  var costoCarga = 0;
-  var franquicia = ctx.n * cfgNum('EQUIPAJE_AVION_INCLUIDO_KG');
-  if (cfgBool('EQUIPOS_DESPACHADOS_POR_CARGA')) {
-    costoCarga = ctx.equipos * cfgNum('FLETE_EQUIPO_CLP');
-    o.motivos.push('Los ' + ctx.equipos + ' equipos viajan por carga terrestre anticipada (' + clp(costoCarga) + ').');
-  } else if (ctx.cargaKg > franquicia) {
-    var piezasExtra = Math.ceil((ctx.cargaKg - franquicia) / 23);
-    costoCarga = piezasExtra * cfgNum('COSTO_EQUIPAJE_EXTRA_CLP');
-    o.motivos.push('Requiere ' + piezasExtra + ' pieza(s) de equipaje facturado adicional (' + clp(costoCarga) + ') para los ' + redondear(ctx.cargaKg, 0) + ' kg de carga.');
-    if (piezasExtra > ctx.n * 2) {
-      o.viable = false;
-      o.motivos.push('Carga excesiva para transporte aereo: active EQUIPOS_DESPACHADOS_POR_CARGA o use camioneta.');
-    }
+  // El vuelo entra por el primer aeropuerto y vuelve por el mismo. Las
+  // conexiones entre sitios se recorren por tierra y deben volver al primero.
+  if (ctx.secuencia.length > 1) {
+    o.viable = false;
+    o.motivos.push('Para comparar avion, seleccione un solo destino. El circuito de varias localidades se planifica por tierra en esta demo.');
   }
 
-  o.costoDirecto = pasajes + arriendo + combustibleLocal + trasladosSantiago + costoCarga;
+  var movilidadLocal = cfgNum('TARIFA_METRO_MICRO_VIAJE') * 2 * ctx.n * ctx.dias;
+  var trasladosSantiago = cfgNum('TRASLADO_AEROPUERTO_CLP') * 2 * ctx.n;
+  o.costoDirecto = pasajes + movilidadLocal + trasladosSantiago;
   o.horasViaje = redondear(horasViaje, 2);
   o.nochesRequeridas = ctx.destino.REQUIERE_PERNOCTAR === 'SI' ? ctx.dias : 0;
   o.diasTotales = ctx.dias;
@@ -236,10 +220,8 @@ function _evaluarAvion(ctx) {
     tarifaUnitariaIdaVuelta: tarifa.idaVuelta,
     aerolinea: tarifa.aerolinea,
     duracionVueloMin: tarifa.duracionMin,
-    arriendoVehiculo: arriendo,
-    combustibleLocal: combustibleLocal,
+    movilidadLocal: movilidadLocal,
     trasladosAeropuerto: trasladosSantiago,
-    carga: costoCarga,
     fuenteTarifa: tarifa.fuente
   };
 
@@ -271,65 +253,18 @@ function _evaluarBus(ctx) {
 
   var pasajes = Math.round(ctx.kmRuta * cfgNum('TARIFA_BUS_CLP_KM') * ctx.n);
   var horasViaje = ctx.kmRuta / cfgNum('VEL_BUS_KMH') + 1.0;  // +1 h de terminales
-  var movilidadLocal = Math.round((cfgNum('UBER_TARIFA_BASE') + 12 * cfgNum('UBER_CLP_KM')) * 2 * ctx.dias);
-
-  var costoCarga = 0;
-  if (ctx.cargaKg > ctx.n * 25) {
-    costoCarga = ctx.equipos * cfgNum('FLETE_EQUIPO_CLP');
-    o.motivos.push('Los equipos no caben como equipaje de bus: se despachan por carga (' + clp(costoCarga) + ').');
-  }
-
-  o.costoDirecto = pasajes + movilidadLocal + costoCarga;
+  var movilidadLocal = cfgNum('TARIFA_METRO_MICRO_VIAJE') * 2 * ctx.n * ctx.dias;
+  o.costoDirecto = pasajes + movilidadLocal;
   o.horasViaje = redondear(horasViaje, 2);
   o.nochesRequeridas = (ctx.destino.REQUIERE_PERNOCTAR === 'SI' ? ctx.dias : 0) + _nochesPorTraslado(horasViaje);
   o.diasTotales = ctx.dias + Math.ceil(horasViaje / 8);
-  o.detalle = { pasajes: pasajes, movilidadLocal: movilidadLocal, carga: costoCarga };
+  o.detalle = { pasajes: pasajes, movilidadLocal: movilidadLocal };
 
   o.motivos.push('Pasaje mas barato del ranking, pero ' + horasLegibles(horasViaje) + ' de viaje sin autonomia en destino.');
   if (horasViaje > 10) {
     o.penalizacion = 60000;
     o.motivos.push('Trayecto superior a 10 h: castigo por fatiga y rigidez de horarios de terminal.');
   }
-  return o;
-}
-
-// ---------------------------------------------------------------------------
-//  AUTO DE APLICACION (Uber / Cabify / DiDi)
-// ---------------------------------------------------------------------------
-function _evaluarUber(ctx) {
-  var o = {
-    modo: MODOS.UBER,
-    etiqueta: 'Auto de aplicacion (Uber / Cabify / DiDi)',
-    viable: true,
-    km: ctx.kmRuta,
-    motivos: []
-  };
-
-  if (ctx.kmRuta > 120) {
-    o.viable = false;
-    o.motivos.push('Distancia excesiva: sobre 120 km la tarifa por km supera cualquier alternativa.');
-    o.costoDirecto = 0; o.horasViaje = 0; o.nochesRequeridas = 0; o.diasTotales = ctx.dias;
-    return o;
-  }
-  if (ctx.cargaKg > cfgNum('PESO_MAX_UBER_KG')) {
-    o.viable = false;
-    o.motivos.push('Carga de ' + redondear(ctx.cargaKg, 0) + ' kg sobre el limite razonable de un auto particular.');
-    o.costoDirecto = 0; o.horasViaje = 0; o.nochesRequeridas = 0; o.diasTotales = ctx.dias;
-    return o;
-  }
-
-  var minutos = ctx.kmRuta / cfgNum('VEL_UBER_KMH') * 60;
-  var autos = Math.ceil(ctx.n / 4);
-  var costoIda = cfgNum('UBER_TARIFA_BASE') + (ctx.kmRuta / 2) * cfgNum('UBER_CLP_KM') + (minutos / 2) * cfgNum('UBER_CLP_MIN');
-  var costo = Math.round(costoIda * 2 * autos);
-
-  o.costoDirecto = costo;
-  o.horasViaje = redondear(minutos / 60, 2);
-  o.nochesRequeridas = 0;
-  o.diasTotales = ctx.dias;
-  o.detalle = { viajes: 2 * autos, autos: autos, costoPorViaje: Math.round(costoIda) };
-  o.motivos.push('Sin costo de estacionamiento ni riesgo de multas; util cuando la flota esta copada.');
-  o.motivos.push('Puerta a puerta en ' + Math.round(minutos / 2) + ' min por trayecto.');
   return o;
 }
 
@@ -345,20 +280,12 @@ function _evaluarMetroMicro(ctx) {
     motivos: []
   };
 
-  if (ctx.destino.ZONA !== 'RM' || ctx.destino.TIENE_METRO !== 'SI') {
+  if (ctx.destino.ZONA !== 'RM' || ctx.kmRuta > 120) {
     o.viable = false;
     o.motivos.push('El destino no cuenta con cobertura de transporte publico integrado adecuada.');
     o.costoDirecto = 0; o.horasViaje = 0; o.nochesRequeridas = 0; o.diasTotales = ctx.dias;
     return o;
   }
-  var pesoPorTecnico = ctx.cargaKg / ctx.n;
-  if (pesoPorTecnico > cfgNum('PESO_MAX_TRANSPORTE_PUBLICO_KG')) {
-    o.viable = false;
-    o.motivos.push('Cada tecnico cargaria ' + redondear(pesoPorTecnico, 0) + ' kg: excede el limite de ' + cfgNum('PESO_MAX_TRANSPORTE_PUBLICO_KG') + ' kg en transporte publico.');
-    o.costoDirecto = 0; o.horasViaje = 0; o.nochesRequeridas = 0; o.diasTotales = ctx.dias;
-    return o;
-  }
-
   var minutos = ctx.kmRuta / cfgNum('VEL_TRANSPORTE_PUBLICO_KMH') * 60;
   o.costoDirecto = Math.round(cfgNum('TARIFA_METRO_MICRO_VIAJE') * 2 * ctx.n);
   o.horasViaje = redondear(minutos / 60, 2);
@@ -450,7 +377,7 @@ function _tarifaDesdeAmadeus(origenIata, destinoIata, fecha) {
       duracionMin: duracionMin,
       aerolinea: seg[0].carrierCode,
       escalas: seg.length - 1,
-      fuente: 'AMADEUS_API'
+      fuente: 'AMADEUS_IDA_RETORNO_ESTIMADO'
     };
   } catch (e) {
     log('WARN', 'Transporte', 'Amadeus fallo: ' + e.message);

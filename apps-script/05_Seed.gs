@@ -3,11 +3,11 @@
  *  05_Seed.gs  ·  Datos maestros del caso de estudio.
  * ============================================================================
  *  Dotacion (10 tecnicos), flota (6 camionetas), las 16 localidades del caso
- *  con kilometraje real por carretera y peajes vigentes, los requerimientos
+ *  con kilometraje referencial por carretera y peajes simulados, los requerimientos
  *  (33 equipos) y los alojamientos convenidos.
  *
  *  Origen de los kilometrajes: rutas reales por Ruta 5 / Ruta 68 / Ruta 78
- *  desde INACAP Sede Santiago Sur (Av. Salvador Allende 4900, San Miguel).
+ *  desde INACAP Sede Santiago Sur (Av. Vicu?a Mackenna 3864, Macul).
  *  Se sobreescriben con valores exactos cuando GOOGLE_MAPS_API_KEY esta
  *  configurada (ver 06_Geo.gs > recalcularMatrizConMaps).
  * ============================================================================
@@ -45,7 +45,7 @@ var SEED_VEHICULOS = [
  *  iata, kmAeropuerto, metro, pernoctar]
  */
 var SEED_DESTINOS = [
-  [BASE_ID, 'Region Metropolitana', 'Santiago', 'San Miguel', APP.BASE_DIRECCION, APP.BASE_LAT, APP.BASE_LNG, 'BASE', 0, 0, 0, 'SCL', 28, 'SI', 'NO'],
+  [BASE_ID, 'Region Metropolitana', 'Santiago', 'Macul', APP.BASE_DIRECCION, APP.BASE_LAT, APP.BASE_LNG, 'BASE', 0, 0, 0, 'SCL', 28, 'SI', 'NO'],
 
   ['D01', 'Region de Atacama',        'Copiapo',    'Copiapo',              'Los Carrera 1263, Copiapo',                 -27.3668, -70.3323, 'NORTE',  805, 540, 27400, 'CPO', 50, 'NO', 'SI'],
   ['D02', 'Region de Coquimbo',       'Elqui',      'Coquimbo',             'Av. Costanera 1450, Coquimbo',              -29.9533, -71.3436, 'NORTE',  470, 315, 18900, 'LSC', 22, 'NO', 'SI'],
@@ -101,18 +101,7 @@ var SEED_HOTELES = [
 ];
 
 /** Kit estandar que viaja con cada tecnico. Se replica por OT. */
-var KIT_ESTANDAR = [
-  ['Equipo a instalar (embalado)',   'EQUIPO',       1, 'un', 18.0],
-  ['Kit de anclaje y tornilleria',   'FERRETERIA',   1, 'set', 2.5],
-  ['Maletin herramientas electricas','HERRAMIENTA',  1, 'set', 7.0],
-  ['Multimetro / Power meter optico','INSTRUMENTO',  1, 'un', 1.2],
-  ['Fusionadora de fibra',           'INSTRUMENTO',  1, 'un', 3.5],
-  ['Rollo cable UTP Cat6 (50 m)',    'INSUMO',       1, 'rollo', 3.0],
-  ['Patch cords / conectores',       'INSUMO',      10, 'un', 0.4],
-  ['EPP: casco, guantes, arnes',     'SEGURIDAD',    1, 'set', 4.5],
-  ['Notebook de configuracion',      'INSTRUMENTO',  1, 'un', 2.0],
-  ['Tablet AppSheet + cargador',     'INSTRUMENTO',  1, 'un', 0.8]
-];
+var KIT_ESTANDAR = []; // Materiales fuera del alcance.
 
 /** Siembra todas las tablas maestras si estan vacias. */
 function sembrarMaestros() {
@@ -157,8 +146,8 @@ function sembrarVehiculos() {
 }
 
 function sembrarDestinos() {
-  if (dbLeer(SH.DESTINOS).length) return 0;
-  var filas = SEED_DESTINOS.map(function (d) {
+  var existentes = indexarPor(dbLeer(SH.DESTINOS), 'DESTINO_ID');
+  var filas = SEED_DESTINOS.filter(function (d) { return !existentes[d[0]]; }).map(function (d) {
     return {
       DESTINO_ID: d[0], REGION: d[1], PROVINCIA: d[2], COMUNA: d[3], DIRECCION: d[4],
       LAT: d[5], LNG: d[6], ZONA: d[7], KM_DESDE_BASE: d[8], MIN_DESDE_BASE: d[9],
@@ -173,7 +162,7 @@ function sembrarDestinos() {
 
 /**
  * Matriz base BASE<->destino y destino<->destino por estimacion geografica.
- * Los pares base-destino usan el kilometraje real cargado en DESTINOS.
+ * Los pares base-destino usan el kilometraje referencial cargado en DESTINOS.
  */
 function sembrarMatrizBase() {
   if (dbLeer(SH.MATRIZ).length) return 0;
@@ -191,7 +180,7 @@ function sembrarMatrizBase() {
         km = Number(otro.KM_DESDE_BASE);
         min = Number(otro.MIN_DESDE_BASE);
         peaje = Number(otro.PEAJE_IDA_CLP);
-        fuente = 'CARGA_MANUAL_RUTA_REAL';
+        fuente = 'DEMO_ESTIMADA';
       } else {
         km = redondear(kmRutaEstimados(a.LAT, a.LNG, b.LAT, b.LNG), 0);
         var urbano = (a.ZONA === 'RM' && b.ZONA === 'RM');

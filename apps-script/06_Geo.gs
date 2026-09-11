@@ -13,6 +13,74 @@
 
 var _matrizCache = null;
 
+/** Consulta por dirección: la clave nunca sale del servidor. No inventa éxito. */
+function consultarRutaExacta_(origen, destino) {
+  var key = String(cfg('GOOGLE_MAPS_API_KEY', '')).trim();
+  if (key) {
+    var resp = UrlFetchApp.fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.legs.startLocation,routes.legs.endLocation' },
+      payload: JSON.stringify({ origin: { address: origen }, destination: { address: destino },
+        travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE', languageCode: 'es', units: 'METRIC' })
+    });
+    if (resp.getResponseCode() !== 200) throw new Error('Google Routes respondió HTTP ' + resp.getResponseCode() + '. Revise la clave, Routes API y su cuota. No se modificaron los datos.');
+    var data = JSON.parse(resp.getContentText());
+    var r = data.routes && data.routes[0];
+    if (!r || !r.legs || !r.legs.length) throw new Error('Google no encontró ruta para estas direcciones.');
+    return { km: r.distanceMeters / 1000, min: parseFloat(r.duration) / 60,
+      lat: r.legs[0].endLocation.latLng.latitude, lng: r.legs[0].endLocation.latLng.longitude,
+      direccion: destino, fuente: 'GOOGLE_ROUTES_API' };
+  }
+  var directions = Maps.newDirectionFinder().setOrigin(origen).setDestination(destino)
+    .setRegion('cl').setMode(Maps.DirectionFinder.Mode.DRIVING).getDirections();
+  if (!directions.routes || !directions.routes.length) throw new Error('Google Maps no encontró una ruta. Ingrese calle, número, comuna y Chile.');
+  var leg = directions.routes[0].legs[0];
+  return { km: leg.distance.value / 1000, min: leg.duration.value / 60,
+    lat: leg.end_location.lat, lng: leg.end_location.lng,
+    direccion: leg.end_address, fuente: 'APPS_SCRIPT_MAPS' };
+}
+
+/** Vista previa: consulta ida y regreso por separado y pide confirmar el punto. */
+function guardarDireccionYCalcularRuta_(datos) {
+  var d = dbUno(SH.DESTINOS, { DESTINO_ID: datos.destinoId });
+  var direccion = String(datos.direccion || '').trim();
+  if (!d || d.DESTINO_ID === BASE_ID) throw new Error('Seleccione una localidad.');
+  if (direccion.length < 10 || direccion.length > 300 || /^https?:/i.test(direccion)) throw new Error('Escriba la dirección completa o coordenadas; no un enlace acortado.');
+  var ida = consultarRutaExacta_(APP.BASE_DIRECCION + ', Chile', direccion);
+  var vuelta = consultarRutaExacta_(direccion, APP.BASE_DIRECCION + ', Chile');
+  if (![ida.km, ida.min, ida.lat, ida.lng, vuelta.km, vuelta.min].every(function (n) { return isFinite(n); }) || ida.km <= 0) throw new Error('Respuesta de Maps incompleta.');
+  var previewId = Utilities.getUuid();
+  var resultado = { previewId: previewId, destinoId: d.DESTINO_ID, direccionAnterior: d.DIRECCION,
+    direccion: direccion, ida: ida, vuelta: vuelta,
+    mapa: 'https://www.google.com/maps/dir/?api=1&origin=' + encodeURIComponent(APP.BASE_DIRECCION) +
+      '&destination=' + encodeURIComponent(ida.lat + ',' + ida.lng) + '&travelmode=driving' };
+  CacheService.getScriptCache().put('RUTA_' + previewId, JSON.stringify(resultado), 600);
+  return resultado;
+}
+
+function confirmarRuta_(previewId) {
+  var cache = CacheService.getScriptCache();
+  var json = cache.get('RUTA_' + String(previewId));
+  if (!json) throw new Error('La vista previa venció. Vuelva a calcular.');
+  var p = JSON.parse(json);
+  var d = dbUno(SH.DESTINOS, { DESTINO_ID: p.destinoId });
+  if (!d || d.DIRECCION !== p.direccionAnterior) throw new Error('La dirección cambió. Vuelva a calcular.');
+  dbActualizar(SH.DESTINOS, 'DESTINO_ID', p.destinoId, { DIRECCION: p.direccion,
+    LAT: p.ida.lat, LNG: p.ida.lng, KM_DESDE_BASE: redondear(p.ida.km, 1), MIN_DESDE_BASE: Math.round(p.ida.min) });
+  // Invalida también enlaces entre localidades: ya no apuntan al mismo sitio.
+  dbEliminar(SH.MATRIZ, { ORIGEN_ID: p.destinoId });
+  dbEliminar(SH.MATRIZ, { DESTINO_ID: p.destinoId });
+  [p.ida, p.vuelta].forEach(function (r, i) {
+    dbInsertar(SH.MATRIZ, { ORIGEN_ID: i ? p.destinoId : BASE_ID,
+      DESTINO_ID: i ? BASE_ID : p.destinoId, KM: redondear(r.km, 1), MINUTOS: Math.round(r.min),
+      PEAJE_CLP: Number(d.PEAJE_IDA_CLP) || 0, FUENTE: r.fuente + '_PEAJE_ESTIMADO', ACTUALIZADO: new Date() });
+  });
+  _matrizCache = null;
+  cache.remove('RUTA_' + String(previewId));
+  return { mensaje: 'Dirección y rutas de ida y regreso guardadas. Pulse Planificar para actualizar tiempos y viáticos. Los peajes siguen siendo estimados.' };
+}
+
 /** Carga la matriz en memoria indexada por 'ORIGEN|DESTINO'. */
 function _cargarMatriz() {
   if (_matrizCache) return _matrizCache;

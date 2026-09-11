@@ -1,6 +1,6 @@
 # Pendientes de puesta en marcha
 
-El código del CRM está completo para instalarse en un Spreadsheet. Estas tareas no pueden realizarse desde este repositorio porque requieren acceso a la cuenta de Google, claves externas o decisiones operativas.
+La guía vigente de la demo está en el [README principal](../README.md). El proyecto está vinculado con clasp. La lista siguiente corresponde al alcance original; materiales ya no forman parte de la presentación, CONFIG se redujo a diez ajustes y las hojas auxiliares se ocultan. Quedan por validar en las cuentas de Google las consultas reales, permisos, implementación web y configuración de AppSheet.
 
 | Prioridad | Tarea | Responsable | Criterio de cierre |
 | --- | --- | --- | --- |

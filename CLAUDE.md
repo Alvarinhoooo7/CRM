@@ -51,6 +51,13 @@ node scripts/check-sintaxis.js
 La validación funcional solo ocurre en Google Apps Script, porque depende de `SpreadsheetApp`, `Maps`, `MailApp` y `UrlFetchApp`.
 Despliegue con `clasp push` desde `apps-script/` (hay `.clasp.json` local, **no versionado**).
 
+## Entorno de Claude Code
+
+La carpeta `.claude/` viaja con el repo: al clonarlo en cualquier equipo quedan
+habilitados los mismos 10 plugins y 12 skills, sin instalación manual.
+Ver `.claude/README.md` para el detalle y para lo que sí es específico de cada
+máquina (MCP de Obsidian, OAuth de GitHub, `.clasp.json`).
+
 ## Seguridad
 
 - **Nunca versionar** `WEBHOOK_SECRET`, `scriptId`, IDs de Spreadsheet ni API keys. `.clasp.json` no va al repo.

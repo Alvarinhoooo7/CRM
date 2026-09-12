@@ -45,6 +45,14 @@ function configurarAcceso_() {
   return 'Acceso configurado. La clave inicial fue eliminada de las propiedades.';
 }
 
+/**
+ * Función pública visible en el menú desplegable del editor de Apps Script.
+ * Ejecutar una sola vez tras definir ACCESO_EMAIL y ACCESO_CLAVE_INICIAL.
+ */
+function configurarAcceso() {
+  return configurarAcceso_();
+}
+
 /** SHA-256 en hexadecimal. */
 function hashClave_(clave) {
   var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,

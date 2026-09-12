@@ -34,7 +34,7 @@ test('El editor rechaza conductor sin licencia, ruta rota y doble vehículo',()=
 });
 test('Texto de celdas no admite fórmulas',()=>assert.throws(()=>ctx.textoCelda_('=IMPORTXML("url")')));
 test('Las funciones internas no quedan expuestas por RPC',()=>{
- const permitidas=new Set('doGet onOpen iniciarSesion cerrarSesion obtenerTablero recalcular actualizarRutas simularTrabajo obtenerOrdenServicio guardarParametro obtenerEsquemaConfig obtenerCatalogoPeajes exportarOrdenDesdeApi obtenerEditor guardarDestino guardarPlanWeb'.split(' '));
+ const permitidas=new Set('doGet onOpen iniciarSesion cerrarSesion obtenerTablero recalcular actualizarRutas simularTrabajo obtenerOrdenServicio guardarParametro obtenerEsquemaConfig obtenerCatalogoPeajes exportarOrdenDesdeApi obtenerEditor guardarDestino guardarPlanWeb configurarAcceso'.split(' '));
  for(const f of fs.readdirSync(root).filter(f=>f.endsWith('.gs'))) for(const m of fs.readFileSync(path.join(root,f),'utf8').matchAll(/^function (\w+)\(/gm)) assert.ok(m[1].endsWith('_')||permitidas.has(m[1]),m[1]);
 });
 test('Técnicos se leen por encabezado aun con columnas reordenadas',()=>{

@@ -54,6 +54,7 @@ function onOpen() {
     .createMenu('⚙ Servicio Tecnico')
     .addItem('Abrir panel', 'abrirPanel_')
     .addSeparator()
+    .addItem('Configurar credenciales de acceso', 'menuConfigurarAcceso_')
     .addItem('Crear o restaurar hojas base', 'menuInstalar_')
     .addItem('Reinstalar desde cero (borra datos)', 'menuReinstalar_')
     .addSeparator()
@@ -77,6 +78,16 @@ function abrirPanel_() {
 
   SpreadsheetApp.getUi().showModalDialog(
     plantilla.evaluate().setWidth(1250).setHeight(820), APP.NOMBRE);
+}
+
+function menuConfigurarAcceso_() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var resultado = configurarAcceso_();
+    ui.alert('Acceso Web', resultado, ui.ButtonSet.OK);
+  } catch (err) {
+    ui.alert('Error al configurar acceso', err.message, ui.ButtonSet.OK);
+  }
 }
 
 function menuInstalar_() {

@@ -1,0 +1,898 @@
+<script>
+/* ==========================================================================
+   SERVICIO TECNICO EN RUTA · v2 · Scripts.html
+   Javascript del navegador. Habla con el servidor por google.script.run.
+   ========================================================================== */
+
+var TOKEN = '';
+var DATOS = null;
+var SECUENCIA_TABLERO = 0;
+var GRAFICOS_LISTOS = false;
+var VISTA_INICIAL = document.body.dataset.vista || 'resumen';
+var TECNICO_INICIAL = document.body.dataset.tecnico || '';
+
+if (window.google && google.charts) {
+  google.charts.load('current', { packages: ['corechart', 'bar'] });
+  google.charts.setOnLoadCallback(function () { GRAFICOS_LISTOS = true; dibujarGraficos(); });
+}
+
+/* ==========================================================================
+   FORMATO
+   ========================================================================== */
+
+function pesos(n) {
+  if (n === null || n === undefined || n === 'no ejecutable') return '—';
+  return '$' + Math.round(n).toLocaleString('es-CL');
+}
+function numero(n, dec) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toLocaleString('es-CL',
+    { minimumFractionDigits: dec || 0, maximumFractionDigits: dec || 0 });
+}
+function porciento(n) { return Math.round((n || 0) * 100) + '%'; }
+function escapar(t) {
+  return String(t === null || t === undefined ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function claseEstado(estado) {
+  if (estado === 'OK') return 'ok';
+  if (estado === 'TOLERANCIA') return 'tolerancia';
+  if (estado === 'SOBRETIEMPO') return 'sobretiempo';
+  return 'fuera';
+}
+
+/* ==========================================================================
+   SESION
+   ========================================================================== */
+
+function entrar() {
+  var email = document.getElementById('email').value;
+  var clave = document.getElementById('clave').value;
+  var boton = document.getElementById('btnEntrar');
+  var error = document.getElementById('errorLogin');
+
+  if (!email || !clave) {
+    error.textContent = 'Ingrese correo y clave.';
+    error.classList.remove('oculto');
+    return;
+  }
+
+  boton.disabled = true;
+  boton.textContent = 'Verificando...';
+  error.classList.add('oculto');
+
+  google.script.run
+    .withSuccessHandler(function (r) {
+      boton.disabled = false;
+      boton.textContent = 'Entrar';
+      if (!r.ok) {
+        error.textContent = r.mensaje;
+        error.classList.remove('oculto');
+        return;
+      }
+      TOKEN = r.token;
+      document.getElementById('login').classList.add('oculto');
+      document.getElementById('app').classList.remove('oculto');
+      cargarTablero(false);
+    })
+    .withFailureHandler(function (e) {
+      boton.disabled = false;
+      boton.textContent = 'Entrar';
+      error.textContent = e.message;
+      error.classList.remove('oculto');
+    })
+    .iniciarSesion(email, clave);
+}
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && !document.getElementById('login').classList.contains('oculto')) {
+    entrar();
+  }
+});
+
+function salir() {
+  google.script.run.cerrarSesion(TOKEN);
+  TOKEN = '';
+  location.reload();
+}
+
+/* ==========================================================================
+   CARGA DEL TABLERO
+   ========================================================================== */
+
+function cargarTablero(forzar, escenario) {
+  var solicitudActual = ++SECUENCIA_TABLERO;
+  document.getElementById('errorGeneral').classList.add('oculto');
+  mostrarCargando(true, forzar
+    ? 'Recalculando y consultando Google Maps...'
+    : 'Calculando el plan y consultando Google Maps...');
+
+  google.script.run
+    .withSuccessHandler(function (payload) {
+      if (solicitudActual !== SECUENCIA_TABLERO) return;
+      DATOS = payload;
+      mostrarCargando(false);
+      dibujarTodo();
+      if (document.getElementById('vista-orden').classList.contains('activa')) cargarOrden();
+      if (VISTA_INICIAL && VISTA_INICIAL !== 'resumen') {
+        mostrar(VISTA_INICIAL);
+        VISTA_INICIAL = '';
+      }
+    })
+    .withFailureHandler(function (e) { if (solicitudActual === SECUENCIA_TABLERO) mostrarError(e); })
+    [forzar ? 'recalcular' : 'obtenerTablero'](TOKEN, escenario || null,
+                                               forzar ? undefined : false);
+}
+
+function recalcular() {
+  cargarTablero(true, DATOS ? DATOS.escenarioActivo : null);
+}
+
+function cambiarEscenario() {
+  cargarTablero(false, document.getElementById('selectorEscenario').value);
+}
+
+function mostrarCargando(activo, texto) {
+  document.getElementById('cargando').style.display = activo ? 'block' : 'none';
+  if (texto) document.getElementById('textoCargando').textContent = texto;
+  document.querySelectorAll('.vista').forEach(function (v) {
+    v.style.visibility = activo ? 'hidden' : 'visible';
+  });
+}
+
+function mostrarError(e) {
+  mostrarCargando(false);
+  var caja = document.getElementById('errorGeneral');
+  caja.innerHTML = '<b>No se pudo calcular el plan</b><br><br>' +
+                   escapar(e.message).replace(/\n/g, '<br>');
+  caja.classList.remove('oculto');
+}
+
+function mostrar(vista) {
+  if (!document.getElementById('vista-' + vista)) vista = 'resumen';
+  document.querySelectorAll('.vista').forEach(function (v) { v.classList.remove('activa'); });
+  document.querySelectorAll('.pestana').forEach(function (p) { p.classList.remove('activa'); });
+  var destino = document.getElementById('vista-' + vista);
+  if (destino) destino.classList.add('activa');
+  var pestana = document.querySelector('.pestana[data-vista="' + vista + '"]');
+  if (pestana) pestana.classList.add('activa');
+
+  // Google Charts necesita que el contenedor sea visible para medir.
+  if (DATOS && GRAFICOS_LISTOS) setTimeout(dibujarGraficos, 30);
+  if (vista === 'orden' && DATOS) cargarOrden();
+  if (vista === 'gestion' && DATOS) cargarEditor();
+  if (vista === 'peajes' && !document.getElementById('tablaPlazas').innerHTML) {
+    cargarPeajes();
+  }
+}
+
+/* ==========================================================================
+   DIBUJO GENERAL
+   ========================================================================== */
+
+function dibujarTodo() {
+  var R = DATOS.resultado;
+  var T = R.totales;
+
+  // Cabecera
+  var generado = new Date(DATOS.generado);
+  document.getElementById('metaCabecera').innerHTML =
+    'Actualizado ' + generado.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) +
+    (DATOS.desdeCache ? ' · desde cache' : '') +
+    '<br>' + DATOS.maps.consultas + ' consultas a Maps';
+
+  // Selector de escenario
+  var sel = document.getElementById('selectorEscenario');
+  if (!sel.options.length) {
+    DATOS.escenarios.forEach(function (e) {
+      var op = document.createElement('option');
+      op.value = e.id;
+      op.textContent = e.titulo;
+      sel.appendChild(op);
+    });
+  }
+  sel.value = DATOS.escenarioActivo;
+
+  dibujarKpis(T);
+  dibujarAlertas(R.alertas);
+  dibujarEscenarios();
+  dibujarConclusiones();
+  dibujarCategorias(T);
+  dibujarLocalidades(R.localidades);
+  dibujarTransferencias(R.transferencias);
+  dibujarTecnicos(R.porTecnico);
+  dibujarMatrices();
+  dibujarModos();
+  dibujarRutas();
+  llenarSelectores();
+  dibujarGraficosBasicos();
+  if (GRAFICOS_LISTOS) dibujarGraficos();
+}
+
+function dibujarKpis(T) {
+  var tarjetas = [
+    ['Equipos planificados', T.equipos, T.localidades + ' localidades atendidas', false],
+    ['Gasto total del plan', pesos(T.gastoTotal), pesos(T.gastoPorEquipo) + ' por equipo', true],
+    ['Dias habiles usados', T.diasHabiles, T.tramos + ' tramos planificados', false],
+    ['Utilizacion de la dotacion', porciento(T.utilizacionGlobal),
+     porciento(T.porcentajeProductivo) + ' de tiempo productivo', false],
+    ['Kilometros totales', numero(T.km) + ' km', numero(T.litros, 1) + ' L de diesel', false],
+    ['Noches de hotel', T.nochesPersona, pesos(T.hotel) + ' en alojamiento', false],
+    ['Viaticos', T.tecnicoDias + ' tecnico-dia', pesos(T.viatico) + ' a transferir', false],
+    ['Jornadas sobre el límite', T.fueraDeLey,
+     T.enSobretiempo + ' con sobretiempo pagado', T.fueraDeLey > 0]
+  ];
+
+  document.getElementById('kpis').innerHTML = tarjetas.map(function (k) {
+    return '<div class="kpi">' +
+      '<div class="etiqueta">' + k[0] + '</div>' +
+      '<div class="valor' + (k[3] ? ' acento' : '') + '">' + k[1] + '</div>' +
+      '<div class="pie">' + k[2] + '</div></div>';
+  }).join('');
+}
+
+function dibujarAlertas(alertas) {
+  var caja = document.getElementById('alertas');
+  if (!alertas.length) {
+    caja.innerHTML = '<div class="alerta bien">Sin alertas: el plan pasa todas las ' +
+                     'validaciones.</div>';
+    return;
+  }
+  var errores = alertas.filter(function (a) { return a.nivel === 'error'; });
+  var avisos = alertas.filter(function (a) { return a.nivel !== 'error'; });
+
+  caja.innerHTML = errores.concat(avisos).map(function (a) {
+    return '<div class="alerta ' + (a.nivel === 'error' ? 'error' : 'aviso') + '">' +
+      '<span class="id">' + a.id + '</span>' + escapar(a.mensaje) + '</div>';
+  }).join('');
+}
+
+function dibujarEscenarios() {
+  var c = DATOS.comparacionEscenario;
+  var activo = DATOS.escenarios.filter(function (e) {
+    return e.id === DATOS.escenarioActivo; })[0];
+
+  document.getElementById('ayudaEscenario').textContent =
+    activo.descripcion + ' Se compara contra: ' + c.titulo + '.';
+
+  var filas = c.filas.map(function (f) {
+    var dif = f.activo - f.alterno;
+    var fmt = f.moneda ? pesos : function (x) { return numero(x, 2); };
+    return '<tr><td>' + f.concepto + '</td>' +
+      '<td class="num"><b>' + fmt(f.activo) + '</b></td>' +
+      '<td class="num">' + fmt(f.alterno) + '</td>' +
+      '<td class="num" style="color:' + (dif <= 0 ? 'var(--ok)' : 'var(--acento)') + '">' +
+      (dif > 0 ? '+' : '') + fmt(dif) + '</td></tr>';
+  }).join('');
+
+  document.getElementById('tablaEscenarios').innerHTML =
+    '<tr><th>Indicador</th><th class="num">Escenario activo</th>' +
+    '<th class="num">' + escapar(c.titulo) + '</th><th class="num">Diferencia</th></tr>' + filas;
+}
+
+function dibujarConclusiones() {
+  var T = DATOS.resultado.totales;
+  var c = DATOS.comparacionEscenario;
+  var p = DATOS.resultado.parametros;
+
+  var textos = [];
+
+  textos.push({
+    titulo: 'Distribución del tiempo de la cuadrilla',
+    texto: 'De ' + numero(T.horasHombre, 1) + ' horas-hombre del plan, ' +
+      numero(T.horasViaje, 1) + ' h se consumen en traslado, un ' +
+      porciento(T.porcentajeTraslado) + ' del tiempo pagado. Solo ' +
+      numero(T.horasEnSitio, 1) + ' h son trabajo efectivo en el sitio. Sumar tecnicos ' +
+      'o camionetas debe evaluarse con demanda adicional y disponibilidad. Compare ' +
+      'la agrupación de destinos antes de invertir.'
+  });
+
+  if (c.ahorroHoras !== 0) {
+    textos.push({
+      titulo: 'Mejora propuesta: ' + numero(Math.abs(c.ahorroHoras), 1) + ' horas-persona de diferencia',
+      texto: 'Enviar al cliente el enlace de Drive antes de la visita permite dictar una ' +
+        'sola sesión de 15 minutos por sitio en vez de ' +
+        (p.P_T_CAPACITACION * 60) + ' minutos por equipo. La diferencia frente al ' +
+        'escenario literal del enunciado es de ' + numero(Math.abs(c.ahorroHoras), 1) +
+        ' horas-hombre. No se apura al tecnico: se cambia el momento en que el cliente ' +
+        'aprende.'
+    });
+  }
+
+  var costoNoche = p.P_TECNICOS_POR_CUADRILLA * (p.P_HOTEL + p.P_VIATICO);
+  var costoExtra = 2 * p.P_TECNICOS_POR_CUADRILLA * p.P_COSTO_HORA_TECNICO * p.P_RECARGO_HORA_EXTRA;
+  textos.push({
+    titulo: 'Comparar sobretiempo y alojamiento',
+    texto: 'Dos horas extra para una cuadrilla de ' + p.P_TECNICOS_POR_CUADRILLA +
+      ' cuestan ' + pesos(costoExtra) + '. Pernoctar esa misma noche cuesta ' +
+      pesos(costoNoche) + ' entre hotel y viático del día siguiente. Esta comparación ' +
+      'orienta la decisión; no cambia las pernoctas del plan. Revise el límite configurado de ' +
+      (p.P_JORNADA_DIA_MAX + (p.P_PERMITE_HORAS_EXTRA ? p.P_HORAS_EXTRA_MAX_DIA : 0)) + ' h y las condiciones de conducción.'
+  });
+
+  if (!p.P_HERRAMIENTAS_TRANSPORTABLES) {
+    textos.push({
+      titulo: 'Las herramientas amarran la flota',
+      texto: 'Con las herramientas fijas en las camionetas, bus y avion dejan de ser ' +
+        'ejecutables aunque el comparador los muestre mas baratos. Dos sets portatiles ' +
+        'cuestan ' + pesos(2 * p.P_COSTO_SET_HERRAMIENTAS) + ', bastante menos que una ' +
+        'septima camioneta a ' + pesos(p.P_COSTO_CAMIONETA_NUEVA) + '.'
+    });
+  }
+
+  document.getElementById('conclusiones').innerHTML = textos.map(function (t) {
+    return '<div class="hallazgo"><h3>' + t.titulo + '</h3><p>' + t.texto + '</p></div>';
+  }).join('');
+}
+
+/* ==========================================================================
+   GASTOS
+   ========================================================================== */
+
+function dibujarCategorias(T) {
+  var cats = [
+    ['Combustible', T.combustible], ['Peajes', T.peajes],
+    ['Desgaste y mantencion', T.desgaste], ['Pasajes', T.pasajes],
+    ['Flete de herramientas', T.flete], ['Arriendo en destino', T.arriendo],
+    ['Traslados', T.traslados], ['Hotel', T.hotel],
+    ['Viatico (incluye colacion)', T.viatico], ['Sobretiempo', T.sobretiempo],
+    ['Holgura de imprevistos', T.imprevistos]
+  ].filter(function (c) { return c[1] > 0; });
+
+  var total = T.gastoTotal;
+  document.getElementById('tablaCategorias').innerHTML =
+    '<tr><th>Categoria</th><th class="num">Monto</th><th class="num">Porcentaje</th>' +
+    '<th>Participacion</th></tr>' +
+    cats.map(function (c) {
+      var pct = c[1] / total;
+      return '<tr><td>' + c[0] + '</td><td class="num">' + pesos(c[1]) + '</td>' +
+        '<td class="num">' + (pct * 100).toFixed(1) + '%</td>' +
+        '<td><div class="barra-fondo"><div class="barra" style="width:' +
+        (pct * 100).toFixed(1) + '%"></div></div></td></tr>';
+    }).join('') +
+    '<tr style="font-weight:700;background:#F0F2F5"><td>TOTAL</td>' +
+    '<td class="num">' + pesos(total) + '</td><td class="num">100%</td><td></td></tr>';
+}
+
+function dibujarLocalidades(locs) {
+  document.getElementById('tablaLocalidades').innerHTML =
+    '<tr><th>Localidad</th><th>Region</th><th class="num">Equipos</th>' +
+    '<th class="num">Horas-hombre</th><th class="num">Combustible</th>' +
+    '<th class="num">Peajes</th><th class="num">Hotel</th><th class="num">Viatico</th>' +
+    '<th class="num">Total</th><th class="num">Por equipo</th></tr>' +
+    locs.map(function (L) {
+      return '<tr><td><b>' + escapar(L.localidad) + '</b></td>' +
+        '<td class="chico">' + escapar(L.region) + '</td>' +
+        '<td class="num">' + L.equipos + '</td>' +
+        '<td class="num">' + numero(L.horasHombre, 1) + '</td>' +
+        '<td class="num">' + pesos(L.combustible) + '</td>' +
+        '<td class="num">' + pesos(L.peajes) + '</td>' +
+        '<td class="num">' + pesos(L.hotel) + '</td>' +
+        '<td class="num">' + pesos(L.viatico) + '</td>' +
+        '<td class="num"><b>' + pesos(L.total) + '</b></td>' +
+        '<td class="num">' + pesos(L.costoPorEquipo) + '</td></tr>';
+    }).join('');
+}
+
+function dibujarTransferencias(trs) {
+  var total = trs.reduce(function (s, t) { return s + t.total; }, 0);
+  document.getElementById('tablaTransferencias').innerHTML =
+    '<tr><th>Tecnico</th><th class="c">Dias</th><th class="c">Noches</th>' +
+    '<th class="num">Viatico</th><th class="num">Hotel</th><th class="num">Combustible</th>' +
+    '<th class="num">Peajes</th><th class="num">Imprevistos</th>' +
+    '<th class="num">A transferir</th></tr>' +
+    trs.map(function (t) {
+      return '<tr><td><b>' + t.tecnico + '</b> ' + escapar(t.nombre) + '</td>' +
+        '<td class="c">' + t.dias + '</td><td class="c">' + t.noches + '</td>' +
+        '<td class="num">' + pesos(t.viatico) + '</td>' +
+        '<td class="num">' + pesos(t.hotel) + '</td>' +
+        '<td class="num">' + pesos(t.combustible) + '</td>' +
+        '<td class="num">' + pesos(t.peajes) + '</td>' +
+        '<td class="num">' + pesos(t.imprevistos) + '</td>' +
+        '<td class="num"><b style="color:var(--acento)">' + pesos(t.total) + '</b></td></tr>';
+    }).join('') +
+    '<tr style="font-weight:700;background:#F0F2F5"><td colspan="8">TOTAL A TRANSFERIR</td>' +
+    '<td class="num">' + pesos(total) + '</td></tr>';
+}
+
+/* ==========================================================================
+   TECNICOS
+   ========================================================================== */
+
+var ordenTecnicos = { campo: 'utilizacion', desc: true };
+
+function dibujarTecnicos(lista) {
+  var datos = lista.slice().sort(function (a, b) {
+    var x = a[ordenTecnicos.campo], y = b[ordenTecnicos.campo];
+    if (typeof x === 'string') return ordenTecnicos.desc ? y.localeCompare(x) : x.localeCompare(y);
+    return ordenTecnicos.desc ? y - x : x - y;
+  });
+
+  var cols = [
+    ['tecnico', 'Codigo', false], ['nombre', 'Nombre', false],
+    ['horas', 'Horas', true], ['horasEnSitio', 'En sitio', true],
+    ['horasViaje', 'En traslado', true], ['equipos', 'Equipos', true],
+    ['nLocalidades', 'Localidades', true], ['dias', 'Dias', true],
+    ['diasFueraRM', 'Dias fuera RM', true], ['noches', 'Noches', true],
+    ['utilizacion', 'Utilizacion', true]
+  ];
+
+  document.getElementById('tablaTecnicos').innerHTML =
+    '<tr>' + cols.map(function (c) {
+      return '<th class="orden' + (c[2] ? ' num' : '') +
+        '" onclick="ordenarTecnicos(\'' + c[0] + '\')">' + c[1] +
+        (ordenTecnicos.campo === c[0] ? (ordenTecnicos.desc ? ' ▾' : ' ▴') : '') + '</th>';
+    }).join('') + '<th>Diagnostico</th></tr>' +
+    datos.map(function (t) {
+      var pct = Math.min(100, (t.utilizacion || 0) * 100);
+      var clase = pct > 95 ? 'alta' : (pct > 75 ? 'media' : 'baja');
+      return '<tr><td><b>' + t.tecnico + '</b></td><td>' + escapar(t.nombre) +
+        (t.licencia === 'No' ? ' <span class="pastilla neutra">sin licencia</span>' : '') +
+        '</td>' +
+        '<td class="num">' + numero(t.horas, 1) + '</td>' +
+        '<td class="num">' + numero(t.horasEnSitio, 1) + '</td>' +
+        '<td class="num">' + numero(t.horasViaje, 1) + '</td>' +
+        '<td class="num">' + numero(t.equipos, 1) + '</td>' +
+        '<td class="num">' + t.nLocalidades + '</td>' +
+        '<td class="num">' + t.dias + '</td>' +
+        '<td class="num">' + t.diasFueraRM + '</td>' +
+        '<td class="num">' + t.noches + '</td>' +
+        '<td class="num">' + porciento(t.utilizacion) +
+        '<div class="barra-fondo" style="height:5px;margin-top:3px">' +
+        '<div class="barra ' + clase + '" style="width:' + pct + '%"></div></div></td>' +
+        '<td class="chico">' + (t.diagnostico ? t.diagnostico.etiqueta : '') + '</td></tr>';
+    }).join('');
+}
+
+function ordenarTecnicos(campo) {
+  if (ordenTecnicos.campo === campo) ordenTecnicos.desc = !ordenTecnicos.desc;
+  else { ordenTecnicos.campo = campo; ordenTecnicos.desc = true; }
+  dibujarTecnicos(DATOS.resultado.porTecnico);
+}
+
+function dibujarFicha() {
+  var codigo = document.getElementById('selectorFicha').value;
+  var t = DATOS.resultado.porTecnico.filter(function (x) { return x.tecnico === codigo; })[0];
+  var tr = DATOS.resultado.transferencias.filter(function (x) { return x.tecnico === codigo; })[0];
+  if (!t) return;
+
+  document.getElementById('ficha').innerHTML =
+    '<div class="rejilla rejilla-4" style="margin-bottom:16px">' +
+      '<div class="kpi"><div class="etiqueta">Horas asignadas</div>' +
+        '<div class="valor">' + numero(t.horas, 1) + '</div>' +
+        '<div class="pie">de ' + numero(t.capacidad, 1) + ' h de capacidad</div></div>' +
+      '<div class="kpi"><div class="etiqueta">Utilizacion</div>' +
+        '<div class="valor">' + porciento(t.utilizacion) + '</div>' +
+        '<div class="pie">' + (t.diagnostico ? t.diagnostico.etiqueta : '') + '</div></div>' +
+      '<div class="kpi"><div class="etiqueta">Dias fuera de la RM</div>' +
+        '<div class="valor">' + t.diasFueraRM + '</div>' +
+        '<div class="pie">' + t.noches + ' noches fuera de casa</div></div>' +
+      '<div class="kpi"><div class="etiqueta">A transferir</div>' +
+        '<div class="valor acento">' + pesos(tr ? tr.total : 0) + '</div>' +
+        '<div class="pie">' + (tr ? tr.dias : 0) + ' dias desplegado</div></div>' +
+    '</div>' +
+    '<div class="alerta ' + (t.utilizacion > 0.95 ? 'error' :
+      (t.utilizacion > 0.75 ? 'aviso' : 'bien')) + '">' +
+      '<span class="id">DIAGNOSTICO AUTOMATICO</span>' +
+      escapar(t.diagnostico ? t.diagnostico.texto : '') +
+      ' Durante el periodo hizo ' + numero(t.equipos, 1) + ' equipos en ' +
+      t.nLocalidades + ' localidades, con ' + numero(t.horasEnSitio, 1) +
+      ' h de trabajo efectivo y ' + numero(t.horasViaje, 1) + ' h de traslado.' +
+    '</div>';
+}
+
+/* ==========================================================================
+   CALENDARIO
+   ========================================================================== */
+
+function dibujarMatrices() {
+  var R = DATOS.resultado;
+  var p = R.parametros;
+  var dias = [];
+  R.tramos.forEach(function (t) { if (dias.indexOf(t.dia) === -1) dias.push(t.dia); });
+  dias.sort(function (a, b) { return Number(a.substring(1)) - Number(b.substring(1)); });
+
+  var porTecnicoDia = {};
+  R.tecnicoDias.forEach(function (td) { porTecnicoDia[td.tecnico + '|' + td.dia] = td.horas; });
+
+  var tecnicos = DATOS.tecnicos;
+
+  var encabezado = '<tr><th>Tecnico</th>' + dias.map(function (d) {
+    var f = DATOS.fechas[d];
+    var texto = d;
+    if (f) {
+      var fecha = new Date(f);
+      texto += '<br><span class="chico">' +
+        String(fecha.getDate()).padStart(2, '0') + '-' +
+        String(fecha.getMonth() + 1).padStart(2, '0') + '</span>';
+    }
+    return '<th>' + texto + '</th>';
+  }).join('') + '<th>Total</th></tr>';
+
+  var construir = function (modo) {
+    return encabezado + tecnicos.map(function (tec) {
+      var total = 0, totalLibre = 0;
+      var celdas = dias.map(function (d) {
+        var h = porTecnicoDia[tec.codigo + '|' + d] || 0;
+        total += h;
+        if (modo === 'libres') {
+          var libre = Math.max(0, p.P_JORNADA_DIA - h);
+          totalLibre += libre;
+          return '<td class="' + (libre > 4 ? 'celda-ok' :
+            (libre > 1 ? 'celda-tol' : 'celda-fue')) + '">' + numero(libre, 1) + '</td>';
+        }
+        if (!h) return '<td class="celda-vacia">—</td>';
+        var clase = h <= p.P_JORNADA_DIA ? 'celda-ok' :
+          (h <= p.P_JORNADA_DIA_MAX ? 'celda-tol' :
+            (h <= p.P_JORNADA_DIA_MAX + (p.P_PERMITE_HORAS_EXTRA ? p.P_HORAS_EXTRA_MAX_DIA : 0) ? 'celda-sob' : 'celda-fue'));
+        return '<td class="' + clase + '">' + numero(h, 1) + '</td>';
+      }).join('');
+
+      var totalMostrado = (modo === 'libres')
+        ? totalLibre : total;
+
+      return '<tr><td class="nombre">' + tec.codigo + ' ' + escapar(tec.nombre) + '</td>' +
+        celdas + '<td><b>' + numero(totalMostrado, 1) + '</b></td></tr>';
+    }).join('');
+  };
+
+  document.getElementById('matrizAsignadas').innerHTML = construir('asignadas');
+  document.getElementById('matrizLibres').innerHTML = construir('libres');
+}
+
+function simular() {
+  var caja = document.getElementById('resultadoSimulacion');
+  caja.innerHTML = '<div class="cargando"><div class="girador"></div>Simulando...</div>';
+
+  google.script.run
+    .withSuccessHandler(function (r) {
+      if (!r.ok) {
+        caja.innerHTML = '<div class="alerta error">' + escapar(r.mensaje) + '</div>';
+        return;
+      }
+      caja.innerHTML =
+        '<div class="alerta ' + (r.cabeEnUnDia ? 'bien' : 'aviso') + '">' +
+          '<span class="id">VEREDICTO</span>' + escapar(r.veredicto) + '</div>' +
+        '<div class="rejilla rejilla-4">' +
+          '<div class="kpi"><div class="etiqueta">Horas totales</div>' +
+            '<div class="valor">' + numero(r.horasTotales, 2) + ' h</div>' +
+            '<div class="pie">' + numero(r.horasViaje, 2) + ' h de viaje ida y vuelta</div></div>' +
+          '<div class="kpi"><div class="etiqueta">Dias necesarios</div>' +
+            '<div class="valor">' + r.dias + '</div>' +
+            '<div class="pie">' + r.noches + ' noche(s) de hotel</div></div>' +
+          '<div class="kpi"><div class="etiqueta">Costo estimado</div>' +
+            '<div class="valor acento">' + pesos(r.total) + '</div>' +
+            '<div class="pie">' + pesos(r.costoPorEquipo) + ' por equipo</div></div>' +
+          '<div class="kpi"><div class="etiqueta">Holgura ese dia</div>' +
+            '<div class="valor">' + numero(r.holguraEseDia, 2) + ' h</div>' +
+            '<div class="pie">' + numero(r.jornadaOcupadaEseDia, 2) + ' h ya ocupadas</div></div>' +
+        '</div>' +
+        '<div class="nota-fuente">Combustible ' + pesos(r.costos.combustible) +
+          ' · Peajes ' + pesos(r.costos.peajes) + ' · Desgaste ' + pesos(r.costos.desgaste) +
+          ' · Hotel ' + pesos(r.costos.hotel) + ' · Viatico ' + pesos(r.costos.viatico) +
+          '. Nada de esto se escribio en las hojas.</div>';
+    })
+    .withFailureHandler(function (e) {
+      caja.innerHTML = '<div class="alerta error">' + escapar(e.message) + '</div>';
+    })
+    .simularTrabajo(TOKEN, {
+      escenario: DATOS.escenarioActivo,
+      localidad: document.getElementById('simLocalidad').value,
+      equipos: document.getElementById('simEquipos').value,
+      tecnicos: document.getElementById('simTecnicos').value,
+      dia: document.getElementById('simDia').value
+    });
+}
+
+/* ==========================================================================
+   TRANSPORTE
+   ========================================================================== */
+
+function dibujarModos() {
+  var filas = DATOS.comparadorModos.map(function (c) {
+    var celdas = c.opciones.map(function (o) {
+      return '<td class="num' + (o.modo === c.masEconomico ? '" style="font-weight:700' : '') +
+        '">' + pesos(o.total) +
+        (o.aplicable ? '' : '<br><span class="chico">no ejecutable</span>') + '</td>';
+    }).join('');
+
+    return '<tr><td><b>' + escapar(c.localidad) + '</b><br><span class="chico">' +
+      c.equipos + ' equipos</span></td>' + celdas +
+      '<td><span class="pastilla ok">' + c.masEconomico + '</span></td>' +
+      '<td><span class="pastilla neutra">' + c.masRapido + '</span></td>' +
+      '<td class="chico">' + (c.ahorroSiSeLibera
+        ? 'Con herramientas portatiles se ahorrarian ' + pesos(Math.abs(c.ahorroSiSeLibera))
+        : '—') + '</td></tr>';
+  }).join('');
+
+  var modos = DATOS.comparadorModos.length
+    ? DATOS.comparadorModos[0].opciones.map(function (o) {
+        return '<th class="num">' + o.modo + '</th>'; }).join('')
+    : '';
+
+  document.getElementById('tablaModos').innerHTML =
+    '<tr><th>Localidad</th>' + modos +
+    '<th>Mas economico</th><th>Mas rapido</th><th>Observacion</th></tr>' + filas;
+}
+
+function dibujarRutas() {
+  var filas = DATOS.resultado.tramos
+    .filter(function (t) { return t.comparacionRuta; })
+    .map(function (t) {
+      var c = t.comparacionRuta;
+      return '<tr><td>' + t.dia + ' ' + t.cuadrilla + '</td>' +
+        '<td><b>' + escapar(t.desde) + ' → ' + escapar(t.hasta) + '</b></td>' +
+        '<td class="num">' + numero(t.km, 1) + ' km</td>' +
+        '<td class="num">' + numero(t.horasViaje, 2) + ' h</td>' +
+        '<td class="num">' + pesos(t.costos.peajes) + '</td>' +
+        '<td><span class="pastilla ' +
+          (t.rutaElegida === 'Por autopista' ? 'neutra' : 'ok') + '">' +
+          escapar(t.rutaElegida) + '</span></td>' +
+        '<td class="chico">' + escapar(c.explicacion) + '</td></tr>';
+    }).join('');
+
+  document.getElementById('tablaRutas').innerHTML =
+    '<tr><th>Dia</th><th>Tramo</th><th class="num">Km</th><th class="num">Tiempo</th>' +
+    '<th class="num">Peaje</th><th>Ruta elegida</th><th>Por que</th></tr>' + filas;
+}
+
+/* ==========================================================================
+   PEAJES
+   ========================================================================== */
+
+function cargarPeajes() {
+  google.script.run
+    .withSuccessHandler(function (c) {
+      document.getElementById('ayudaPeajes').innerHTML =
+        c.plazas.length + ' plazas y porticos del catalogo MOP 2026, categoria 1 (auto y ' +
+        'camioneta). <b>' + c.estimadas.length + ' localidades</b> tienen su secuencia de ' +
+        'plazas marcada como estimada: se contrastan con la primera cartola del TAG.';
+
+      document.getElementById('tablaPlazas').innerHTML =
+        '<tr><th>Codigo</th><th>Plaza o portico</th><th>Concesion</th><th>Tipo</th>' +
+        '<th>Region</th><th class="num">Normal</th><th class="num">Punta</th>' +
+        '<th>Fuente</th></tr>' +
+        c.plazas.map(function (p) {
+          var normal = p.cobro === 'PorKm'
+            ? '$' + numero(p.tarifaKm.normal, 0) + '/km' : pesos(p.tarifa.normal);
+          var punta = p.cobro === 'PorKm'
+            ? '$' + numero(p.tarifaKm.punta, 0) + '/km' : pesos(p.tarifa.punta);
+          return '<tr><td class="chico">' + p.codigo + '</td>' +
+            '<td>' + escapar(p.nombre) + '</td>' +
+            '<td class="chico">' + escapar(p.concesion) + '</td>' +
+            '<td><span class="pastilla neutra">' + p.tipo + '</span></td>' +
+            '<td class="chico">' + escapar(p.region) + '</td>' +
+            '<td class="num">' + normal + '</td><td class="num">' + punta + '</td>' +
+            '<td class="chico">' + escapar(p.fuente) + '</td></tr>';
+        }).join('');
+
+      var desglose = Object.keys(c.rutas).filter(function (k) { return k !== 'BASE'; })
+        .map(function (loc) {
+          var r = c.rutas[loc];
+          var plazas = r.plazas.map(function (cod) {
+            var p = c.plazas.filter(function (x) { return x.codigo === cod; })[0];
+            return p ? escapar(p.nombre) : cod;
+          }).join(' · ');
+          return '<div style="padding:9px 0;border-bottom:1px solid #EEF0F3">' +
+            '<b>' + escapar(loc) + '</b> <span class="pastilla ' +
+            (r.estado === 'VERIFICADO' ? 'ok' : 'tolerancia') + '">' + r.estado + '</span>' +
+            '<div class="chico" style="margin-top:3px">' + (plazas || 'sin plazas') + '</div>' +
+            (r.nota ? '<div class="chico" style="font-style:italic">' + escapar(r.nota) +
+                      '</div>' : '') + '</div>';
+        }).join('');
+      document.getElementById('desglosePeajes').innerHTML = desglose;
+    })
+    .withFailureHandler(function (e) {
+      document.getElementById('ayudaPeajes').textContent = e.message;
+    })
+    .obtenerCatalogoPeajes(TOKEN);
+}
+
+/* ==========================================================================
+   ORDEN DE SERVICIO
+   ========================================================================== */
+
+function cargarOrden() {
+  var codigo = document.getElementById('selectorOrden').value;
+  var caja = document.getElementById('contenidoOrden');
+  caja.innerHTML = '<div class="cargando"><div class="girador"></div>Generando...</div>';
+
+  google.script.run
+    .withSuccessHandler(function (o) {
+      if (!o.ok) {
+        caja.innerHTML = '<div class="alerta error">' + escapar(o.mensaje) + '</div>';
+        return;
+      }
+      var tr = o.transferencia || {};
+      var re = o.resumen || {};
+
+      var tramos = o.tramos.map(function (t) {
+        var fecha = t.fecha ? new Date(t.fecha).toLocaleDateString('es-CL') : '';
+        return '<tr><td>' + t.dia + '<br><span class="chico">' + fecha + '</span></td>' +
+          '<td>' + t.cuadrilla + '<br><span class="chico">' + t.vehiculo +
+            (t.conduce ? ' · CONDUCE' : '') + '</span></td>' +
+          '<td><b>' + escapar(t.desde) + ' → ' + escapar(t.hasta) + '</b>' +
+            '<br><span class="chico">' + escapar(t.direccion) + '</span></td>' +
+          '<td class="c">' + (t.equipos || '—') + '</td>' +
+          '<td class="num">' + numero(t.horasTramo, 2) + ' h<br>' +
+            '<span class="chico">' + numero(t.km, 1) + ' km</span></td>' +
+          '<td>' + (t.noches ? '<b>' + t.noches + ' noche(s)</b><br><span class="chico">' +
+            escapar(t.hotel) + '</span>' : '—') + '</td></tr>';
+      }).join('');
+
+      caja.innerHTML =
+        '<div class="tarjeta">' +
+          '<h2>' + o.tecnico.codigo + ' · ' + escapar(o.tecnico.nombre) + '</h2>' +
+          '<p class="ayuda">Licencia de conducir: <b>' + o.tecnico.licencia + '</b></p>' +
+          '<div class="rejilla rejilla-4">' +
+            '<div class="kpi"><div class="etiqueta">Monto a transferir</div>' +
+              '<div class="valor acento">' + pesos(tr.total) + '</div>' +
+              '<div class="pie">viatico ' + pesos(tr.viatico) + ' · hotel ' +
+                pesos(tr.hotel) + '</div></div>' +
+            '<div class="kpi"><div class="etiqueta">Dias desplegado</div>' +
+              '<div class="valor">' + (re.dias || 0) + '</div>' +
+              '<div class="pie">' + (re.noches || 0) + ' noches fuera</div></div>' +
+            '<div class="kpi"><div class="etiqueta">Horas asignadas</div>' +
+              '<div class="valor">' + numero(re.horas, 1) + '</div>' +
+              '<div class="pie">' + numero(re.horasEnSitio, 1) + ' h en sitio</div></div>' +
+            '<div class="kpi"><div class="etiqueta">Localidades</div>' +
+              '<div class="valor">' + (re.nLocalidades || 0) + '</div>' +
+              '<div class="pie">' + numero(re.equipos, 1) + ' equipos</div></div>' +
+          '</div></div>' +
+
+        '<div class="tarjeta"><h2>Hoja de ruta</h2>' +
+          '<div class="tabla-envoltorio"><table class="datos">' +
+          '<tr><th>Dia</th><th>Cuadrilla</th><th>Tramo y direccion</th>' +
+          '<th class="c">Equipos</th><th class="num">Tiempo</th><th>Pernocta</th></tr>' +
+          (tramos || '<tr><td colspan="6">Técnico en reserva: sin tramos asignados en este plan.</td></tr>') + '</table></div></div>' +
+
+        '<div class="tarjeta"><h2>Direcciones y material de la visita</h2>' +
+          o.tramos.filter(function (t) { return t.equipos > 0; }).map(function (t) {
+            var url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(t.direccion);
+            return '<p><b>' + escapar(t.hasta) + '</b> · <a href="' + escapar(url) + '" target="_blank" rel="noopener">Abrir dirección</a>' +
+              (/^https:\/\//i.test(t.linkCapacitacion) ? ' · <a href="' + escapar(t.linkCapacitacion) + '" target="_blank" rel="noopener">Material de capacitación</a>' : ' · Material por confirmar') + '</p>';
+          }).join('') + '</div>' +
+
+        (o.capacitacionDigital
+          ? '<div class="alerta aviso"><span class="id">ANTES DE SALIR</span>' +
+            'Confirme que al cliente se le envio el correo con el enlace de Drive de la ' +
+            'capacitacion. La visita presencial esta planificada corta justamente porque ' +
+            'el cliente ya vio el material.</div>'
+          : '') +
+
+        '<div class="tarjeta"><h2>Implementos y materiales</h2><p class="ayuda">Verificación en esta pantalla. Las marcas se reinician al volver a cargar la orden.</p>' +
+          o.checklist.map(function (c, i) {
+            return '<label class="checklist-item"><input type="checkbox" id="chk' + i + '">' +
+              '<span>' + escapar(c.item) + '</span></label>';
+          }).join('') + '</div>';
+    })
+    .withFailureHandler(function (e) {
+      caja.innerHTML = '<div class="alerta error">' + escapar(e.message) + '</div>';
+    })
+    .obtenerOrdenServicio(TOKEN, codigo, DATOS.escenarioActivo);
+}
+
+function exportarPdf() {
+  var codigo = document.getElementById('selectorOrden').value;
+  google.script.run
+    .withSuccessHandler(function (r) {
+      alert('PDF creado en Drive:\n\n' + r.nombre + '\n\n' + r.url);
+    })
+    .withFailureHandler(function (e) { alert('Error: ' + e.message); })
+    .exportarOrdenDesdeApi(TOKEN, codigo, DATOS.escenarioActivo);
+}
+
+/* ==========================================================================
+   SELECTORES
+   ========================================================================== */
+
+function llenarSelectores() {
+  var llenar = function (id, items, valor, texto, seleccionado) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    seleccionado = seleccionado || sel.value;
+    sel.innerHTML = items.map(function (x) {
+      return '<option value="' + escapar(x[valor]) + '">' + escapar(x[texto]) + '</option>';
+    }).join('');
+    if (seleccionado) sel.value = seleccionado;
+  };
+
+  var tecnicos = DATOS.tecnicos.map(function (t) {
+    return { codigo: t.codigo, etiqueta: t.codigo + ' · ' + t.nombre };
+  });
+  llenar('selectorFicha', tecnicos, 'codigo', 'etiqueta');
+  llenar('selectorOrden', tecnicos, 'codigo', 'etiqueta', TECNICO_INICIAL);
+
+  var locs = DATOS.destinos
+    .filter(function (d) { return d.localidad !== 'BASE'; })
+    .map(function (d) { return { codigo: d.localidad, etiqueta: d.localidad }; });
+  llenar('simLocalidad', locs, 'codigo', 'etiqueta');
+
+  var dias = [];
+  for (var i = 1; i <= DATOS.resultado.parametros.P_HORIZONTE_MAX_DIAS; i++) {
+    dias.push({ codigo: 'D' + i, etiqueta: 'D' + i });
+  }
+  llenar('simDia', dias, 'codigo', 'etiqueta');
+
+  dibujarFicha();
+  TECNICO_INICIAL = '';
+  dibujarOperacion();
+}
+
+/* ==========================================================================
+   GRAFICOS
+   ========================================================================== */
+
+function dibujarGraficos() {
+  if (!GRAFICOS_LISTOS || !DATOS) return;
+  var R = DATOS.resultado, T = R.totales;
+
+  var opciones = function (extra) {
+    var base = {
+      backgroundColor: 'transparent',
+      chartArea: { width: '72%', height: '76%' },
+      legend: { position: 'none' },
+      fontName: 'Arial', fontSize: 11,
+      colors: ['#1F3864'],
+      hAxis: { textStyle: { fontSize: 10 } },
+      vAxis: { textStyle: { fontSize: 10 } }
+    };
+    for (var k in extra) base[k] = extra[k];
+    return base;
+  };
+
+  var pintar = function (id, tipo, datos, opts) {
+    var el = document.getElementById(id);
+    if (!el || !el.offsetParent) return;   // no dibujar en pestanas ocultas
+    new google.visualization[tipo](el).draw(google.visualization.arrayToDataTable(datos), opts);
+  };
+
+  // Gasto por localidad
+  var locs = R.localidades.slice(0, 16);
+  pintar('graficoGastoLocalidad', 'BarChart',
+    [['Localidad', 'Gasto']].concat(locs.map(function (L) { return [L.localidad, L.total]; })),
+    opciones({ colors: ['#C00000'], hAxis: { format: 'short' } }));
+
+  // Equipos por localidad
+  pintar('graficoEquipos', 'BarChart',
+    [['Localidad', 'Equipos']].concat(
+      locs.map(function (L) { return [L.localidad, L.equipos]; })),
+    opciones({}));
+
+  // Composicion del gasto
+  var cats = [
+    ['Combustible', T.combustible], ['Peajes', T.peajes], ['Desgaste', T.desgaste],
+    ['Pasajes', T.pasajes], ['Hotel', T.hotel], ['Viatico', T.viatico],
+    ['Sobretiempo', T.sobretiempo], ['Imprevistos', T.imprevistos]
+  ].filter(function (c) { return c[1] > 0; });
+  pintar('graficoComposicion', 'PieChart', [['Categoria', 'Monto']].concat(cats),
+    opciones({ legend: { position: 'right', textStyle: { fontSize: 11 } },
+               pieHole: 0.42,
+               colors: ['#1F3864', '#2E5C9A', '#5B8DD6', '#8FB3E8',
+                        '#C00000', '#E8A33D', '#7A1212', '#F2CC8F'] }));
+
+  // Gasto por dia
+  var porDia = {};
+  R.tramos.forEach(function (t) {
+    porDia[t.dia] = (porDia[t.dia] || 0) + t.subtotal;
+  });
+  var dias = Object.keys(porDia).sort(function (a, b) {
+    return Number(a.substring(1)) - Number(b.substring(1)); });
+  pintar('graficoGastoDia', 'ColumnChart',
+    [['Dia', 'Gasto']].concat(dias.map(function (d) { return [d, porDia[d]]; })),
+    opciones({ colors: ['#2E5C9A'] }));
+
+  // Horas en sitio contra traslado
+  pintar('graficoHoras', 'BarChart',
+    [['Tecnico', 'En sitio', 'En traslado']].concat(
+      R.porTecnico.map(function (t) {
+        return [t.tecnico, t.horasEnSitio, t.horasViaje]; })),
+    opciones({ isStacked: true, legend: { position: 'top' },
+               colors: ['#2E7D32', '#E8A33D'] }));
+}
+
+window.addEventListener('resize', function () {
+  clearTimeout(window._redibujar);
+  window._redibujar = setTimeout(dibujarGraficos, 250);
+});
+</script>

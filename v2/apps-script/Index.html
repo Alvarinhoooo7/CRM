@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= incluir_('Estilos') ?>
+</head>
+<body data-vista="<?= vistaInicial ?>" data-tecnico="<?= tecnicoInicial ?>">
+
+<!-- ==================================================================
+     PANTALLA DE INGRESO
+     ================================================================== -->
+<div id="login" class="pantalla-login">
+  <div class="caja-login">
+    <h1><?= nombreApp ?></h1>
+    <div class="sub">Panel de planificacion y control · v<?= version ?></div>
+
+    <div class="campo">
+      <label for="email">Correo</label>
+      <input type="email" id="email" autocomplete="username" placeholder="demo@serviciotecnico.cl">
+    </div>
+    <div class="campo">
+      <label for="clave">Clave</label>
+      <input type="password" id="clave" autocomplete="current-password">
+    </div>
+
+    <div id="errorLogin" class="error-caja oculto" style="margin-bottom:14px"></div>
+
+    <button class="btn btn-ancho" id="btnEntrar" onclick="entrar()">Entrar</button>
+
+    <div class="nota-fuente">
+      El acceso se valida en el servidor: las credenciales se verifican al ingresar. Acceso compartido de demostración; sesión de hasta 6 horas.
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================
+     APLICACION
+     ================================================================== -->
+<div id="app" class="oculto">
+
+  <div class="cabecera">
+    <h1><?= nombreApp ?></h1>
+    <span class="version">v<?= version ?></span>
+    <span class="espaciador"></span>
+    <select id="selectorEscenario" onchange="cambiarEscenario()"
+            style="width:auto;min-width:230px;font-size:12px"></select>
+    <button class="btn btn-chico btn-acento" onclick="recalcular()">Recalcular</button>
+    <button class="btn btn-chico btn-secundario" onclick="salir()">Salir</button>
+    <div class="meta" id="metaCabecera"></div>
+  </div>
+
+  <div class="pestanas">
+    <button class="pestana" data-vista="operacion" onclick="mostrar('operacion')">Rutas y flota</button>
+    <button class="pestana activa" data-vista="resumen"     onclick="mostrar('resumen')">Resumen</button>
+    <button class="pestana"        data-vista="gastos"      onclick="mostrar('gastos')">Gastos</button>
+    <button class="pestana"        data-vista="tecnicos"    onclick="mostrar('tecnicos')">Tecnicos</button>
+    <button class="pestana"        data-vista="calendario"  onclick="mostrar('calendario')">Calendario</button>
+    <button class="pestana"        data-vista="transporte"  onclick="mostrar('transporte')">Transporte</button>
+    <button class="pestana"        data-vista="peajes"      onclick="mostrar('peajes')">Peajes</button>
+    <button class="pestana"        data-vista="orden"       onclick="mostrar('orden')">Orden de servicio</button>
+    <button class="pestana" data-vista="gestion" onclick="mostrar('gestion')">Planificación</button>
+    <button class="pestana" data-vista="guia" onclick="mostrar('guia')">Guía del equipo</button>
+  </div>
+
+  <div class="contenido">
+    <div class="banda-contexto"><span class="punto-vivo"></span> CASO ACADÉMICO · 33 EQUIPOS / 16 LOCALIDADES <span>Presupuestos estimados · sin transferencias bancarias</span></div>
+    <div id="notificacion" role="status" aria-live="polite" class="oculto"></div>
+
+    <div id="cargando" class="cargando">
+      <div class="girador"></div>
+      <div id="textoCargando">Calculando el plan y consultando Google Maps...</div>
+    </div>
+
+    <div id="errorGeneral" role="alert" class="error-caja oculto"></div>
+
+    <div class="vista" id="vista-operacion">
+      <div class="intro-vista"><div><div class="sobretitulo">CENTRO DE OPERACIONES</div><h2>Todo el recorrido, a la vista.</h2><p>Cuadrillas, vehículos y visitas del escenario seleccionado.</p></div><button class="btn btn-secundario" onclick="descargarPlan()">Descargar itinerario CSV</button></div>
+      <div class="tarjeta"><div class="fila-form"><div class="campo"><label for="filtroRuta">Buscar localidad o técnico</label><input id="filtroRuta" type="search" placeholder="Copiapó, T01, C2…" oninput="dibujarOperacion()"></div><div class="campo"><label for="filtroDiaRuta">Día del plan</label><select id="filtroDiaRuta" onchange="dibujarOperacion()"><option value="">Todos los días</option></select></div></div></div>
+      <div id="cuadrillas" class="rejilla rejilla-3"></div>
+      <div class="tarjeta"><h2>Itinerario por tramo</h2><p class="ayuda">Los enlaces abren la dirección en Maps. Confirme allí el trayecto: el enlace no garantiza la misma autopista usada en el presupuesto.</p><div class="tabla-envoltorio"><table class="datos" id="tablaItinerario"></table></div></div>
+      <div class="tarjeta"><h2>Disponibilidad de la flota</h2><div class="rejilla rejilla-3" id="flota"></div></div>
+    </div>
+
+    <div class="vista" id="vista-gestion">
+      <div class="intro-vista"><div><div class="sobretitulo">COORDINACIÓN</div><h2>Prepara la próxima salida.</h2><p>Guarda los cambios y recalcula para revisar su efecto en el presupuesto.</p></div><button class="btn btn-secundario" onclick="cargarEditor()">Recargar editor</button></div>
+      <div id="estadoEditor" role="status"></div>
+      <div class="tarjeta"><h2>Direcciones, alojamiento y capacitación</h2><p class="ayuda">Las cantidades del caso se conservan. Registre el hotel y el enlace de material confirmado; esta aplicación no realiza reservas ni envía correos.</p><form id="formDestino" onsubmit="event.preventDefault(); guardarDestinoWeb()"><div class="fila-form"><div class="campo"><label for="editLocalidad">Localidad</label><select id="editLocalidad" onchange="seleccionarDestino()"></select></div><div class="campo"><label for="editDireccion">Dirección exacta</label><input id="editDireccion" required maxlength="500"></div></div><div class="fila-form" style="margin-top:16px"><div class="campo"><label for="editHotel">Hotel propuesto y dirección</label><input id="editHotel" maxlength="500"></div><div class="campo"><label for="editEnlace">Material de capacitación (HTTPS)</label><input id="editEnlace" type="url" placeholder="https://drive.google.com/…"></div><button class="btn" type="submit">Guardar destino</button></div></form></div>
+      <div class="tarjeta"><h2>Editar el plan</h2><p class="ayuda">Cada fila representa un traslado seguido del trabajo en el destino. Se valida continuidad, conductor, técnicos y vehículo. Las alertas de jornada se revisan después de recalcular. Borrar una fila solo modifica el borrador hasta guardar.</p><div class="acciones-editor"><button class="btn btn-secundario" onclick="agregarTramo()">Agregar tramo</button><button class="btn" onclick="guardarTramos()">Guardar plan</button></div><div class="tabla-envoltorio"><table class="datos editor-plan" id="editorPlan"></table></div></div>
+      <div class="tarjeta"><h2>Parámetros del presupuesto</h2><p class="ayuda">Los datos del PDF y los valores calculados aparecen bloqueados. Los cambios de capacitación pueden estar sobrescritos por el escenario seleccionado.</p><input type="search" id="buscarConfig" aria-label="Buscar parámetro" placeholder="Buscar diésel, hotel, jornada…" oninput="filtrarConfig()"><div id="editorConfig"></div></div>
+    </div>
+
+    <div class="vista" id="vista-guia">
+      <div class="intro-vista"><div><div class="sobretitulo">PRESENTACIÓN · 4 INTEGRANTES</div><h2>Entender el plan. Explicar las decisiones.</h2><p>Un recorrido de 15 minutos por el problema, los cálculos y la experiencia del técnico.</p></div></div>
+      <div class="rejilla rejilla-2">
+        <div class="tarjeta"><h2>01 · Caso y alcance · 3 minutos</h2><p>10 técnicos y 6 Peugeot Partner para 33 equipos en 16 localidades. El escenario literal considera 2 horas de instalación y 30 minutos de capacitación por equipo. Las cuadrillas de tres son una decisión del equipo.</p><button class="btn btn-secundario" onclick="mostrar('resumen')">Mostrar resumen</button></div>
+        <div class="tarjeta"><h2>02 · Rutas y recursos · 4 minutos</h2><p>Explica los corredores norte, sur y RM. Abre el itinerario, identifica conductor y vehículo y muestra las noches. El motor evalúa el plan ingresado; no demuestra un óptimo global.</p><button class="btn btn-secundario" onclick="mostrar('operacion')">Mostrar rutas</button></div>
+        <div class="tarjeta"><h2>03 · Presupuesto · 4 minutos</h2><p>Combustible = km ÷ 20 × precio del litro. Hotel por persona y noche; viático una vez por técnico y día. La transferencia incluye gastos financiados por el técnico y reserva, pero no desgaste ni todos los costos empresariales.</p><button class="btn btn-secundario" onclick="mostrar('gastos')">Mostrar gastos</button></div>
+        <div class="tarjeta"><h2>04 · Técnico y mejora · 4 minutos</h2><p>Abre la orden de T01: ruta, hotel, vehículo e implementos. Exporta el PDF y compara los dos escenarios. La capacitación digital es una propuesta que debe validarse con el cliente y el docente.</p><button class="btn btn-secundario" onclick="mostrar('orden')">Mostrar orden</button></div>
+      </div>
+      <div class="tarjeta"><h2>Preguntas que todos deben poder responder</h2>
+        <details><summary>¿Por qué el gasto total difiere de las transferencias?</summary><p>El total incluye costos de operación como desgaste y sobretiempo. Las transferencias solo incluyen conceptos pagados por los técnicos, reserva y redondeo. Los peajes TAG pueden ser pagados por la empresa.</p></details>
+        <details><summary>¿Qué significan los dos escenarios?</summary><p>Literal: 33 capacitaciones de 30 minutos. Mejora propuesta: 16 sesiones de 15 minutos con preparación digital. Son 12,5 horas de sesiones menos, no necesariamente 12,5 horas-persona: el motor contabiliza el tiempo de toda la cuadrilla.</p></details>
+        <details><summary>¿Son valores reales y trabajos terminados?</summary><p>Son equipos planificados. Rutas de Maps son estimaciones de viaje; peajes dependen del recorrido y horario. Hoteles y pasajes son referenciales. No hay confirmación de instalaciones realizadas ni pagos bancarios.</p></details>
+        <details><summary>¿Cómo se mejora el servicio?</summary><p>Medir viaje y trabajo real, validar capacitación previa y cotizar herramientas transportables antes de invertir en más vehículos. Comparar los escenarios y justificar cada supuesto con evidencia.</p></details>
+      </div>
+    </div>
+
+    <!-- ---------- RESUMEN ---------- -->
+    <div class="vista activa" id="vista-resumen">
+      <div class="rejilla rejilla-4" id="kpis"></div>
+
+      <div class="tarjeta">
+        <h2>Alertas del sistema</h2>
+        <p class="ayuda">
+          Los errores impiden ejecutar el plan tal como esta. Los avisos son hallazgos
+          que conviene mirar antes de transferir dinero, no fallas.
+        </p>
+        <div id="alertas"></div>
+      </div>
+
+      <div class="rejilla rejilla-2">
+        <div class="tarjeta">
+          <h2>Gasto por localidad</h2>
+          <div id="graficoGastoLocalidad" class="grafico"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Equipos por localidad</h2>
+          <div id="graficoEquipos" class="grafico"></div>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Comparacion de escenarios</h2>
+        <p class="ayuda" id="ayudaEscenario"></p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaEscenarios"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Conclusiones del analisis</h2>
+        <div id="conclusiones"></div>
+      </div>
+    </div>
+
+    <!-- ---------- GASTOS ---------- -->
+    <div class="vista" id="vista-gastos">
+      <div class="rejilla rejilla-2">
+        <div class="tarjeta">
+          <h2>Composicion del gasto</h2>
+          <div id="graficoComposicion" class="grafico"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Costos directos de tramos por día</h2>
+          <p class="ayuda">Incluye costos de traslado y hotel. Los viáticos, sobretiempo y reserva están en el total del plan.</p>
+          <div id="graficoGastoDia" class="grafico"></div>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Detalle por categoria</h2>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaCategorias"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Detalle por localidad</h2>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaLocalidades"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Transferencia por tecnico</h2>
+        <p class="ayuda">
+          Responde textualmente lo que pide el enunciado: cuanto dinero necesita cada
+          tecnico para hacer su ruta. El monto se redondea hacia arriba e incluye una
+          holgura para imprevistos.
+        </p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaTransferencias"></table></div>
+      </div>
+    </div>
+
+    <!-- ---------- TECNICOS ---------- -->
+    <div class="vista" id="vista-tecnicos">
+      <div class="tarjeta">
+        <h2>Carga por tecnico</h2>
+        <p class="ayuda">Haga clic en los encabezados para ordenar.</p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaTecnicos"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Horas en sitio contra horas en traslado</h2>
+        <div id="graficoHoras" class="grafico"></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Ficha individual</h2>
+        <div class="fila-form" style="margin-bottom:16px">
+          <div class="campo">
+            <label>Tecnico</label>
+            <select id="selectorFicha" onchange="dibujarFicha()"></select>
+          </div>
+        </div>
+        <div id="ficha"></div>
+      </div>
+    </div>
+
+    <!-- ---------- CALENDARIO ---------- -->
+    <div class="vista" id="vista-calendario">
+      <div class="tarjeta">
+        <h2>Horas asignadas por tecnico y dia</h2>
+        <p class="ayuda">Coloreado segun el semaforo de jornada.</p>
+        <div class="tabla-envoltorio"><table class="matriz" id="matrizAsignadas"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Horas libres</h2>
+        <p class="ayuda">
+          Esta es la holgura teórica del plan: lo que queda de la
+          jornada efectiva despues de lo ya planificado.
+        </p>
+        <div class="tabla-envoltorio"><table class="matriz" id="matrizLibres"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Simular un trabajo nuevo</h2>
+        <p class="ayuda">
+          No escribe nada en las hojas. Responde si cabe en la jornada, cuantas horas
+          ocuparia y cuanto costaria.
+        </p>
+        <div class="fila-form">
+          <div class="campo">
+            <label>Localidad</label>
+            <select id="simLocalidad"></select>
+          </div>
+          <div class="campo">
+            <label>Equipos</label>
+            <input type="number" id="simEquipos" value="2" min="1" max="99">
+          </div>
+          <div class="campo">
+            <label>Tecnicos</label>
+            <input type="number" id="simTecnicos" value="3" min="1" max="10">
+          </div>
+          <div class="campo">
+            <label>Dia</label>
+            <select id="simDia"></select>
+          </div>
+          <button class="btn" onclick="simular()">Simular</button>
+        </div>
+        <div id="resultadoSimulacion" style="margin-top:16px"></div>
+      </div>
+    </div>
+
+    <!-- ---------- TRANSPORTE ---------- -->
+    <div class="vista" id="vista-transporte">
+      <div class="tarjeta">
+        <h2>Comparador de modos por localidad</h2>
+        <p class="ayuda">
+          Viaje completo de ida y vuelta para la dotacion asignada. Bus y avión son alternativas referenciales. El comparador no modifica el plan; hay que cotizar horarios, conexiones y traslado de herramientas.
+        </p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaModos"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Decision de ruta: autopista o rodeo</h2>
+        <p class="ayuda">
+          Cada tramo se consulta dos veces a Google Maps, con y sin peajes. La decision
+          depende de donde cae el tiempo adicional: si cabe en la jornada ya esta pagado,
+          si la excede cuesta hora extra con recargo.
+        </p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaRutas"></table></div>
+      </div>
+    </div>
+
+    <!-- ---------- PEAJES ---------- -->
+    <div class="vista" id="vista-peajes">
+      <div class="tarjeta">
+        <h2>Catalogo de plazas y porticos</h2>
+        <p class="ayuda" id="ayudaPeajes"></p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaPlazas"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Peaje por localidad, desglosado</h2>
+        <p class="ayuda">
+          El total de cada destino es la suma de las plazas que se cruzan. Por eso es
+          desglosable línea por línea. Las secuencias marcadas ESTIMADO requieren verificación con la ruta y cartola real.
+        </p>
+        <div id="desglosePeajes"></div>
+      </div>
+    </div>
+
+    <!-- ---------- ORDEN DE SERVICIO ---------- -->
+    <div class="vista" id="vista-orden">
+      <div class="tarjeta">
+        <div class="fila-form">
+          <div class="campo">
+            <label>Tecnico</label>
+            <select id="selectorOrden" onchange="cargarOrden()"></select>
+          </div>
+          <button class="btn" onclick="exportarPdf()">Exportar a PDF en Drive</button>
+        </div>
+      </div>
+      <div id="contenidoOrden"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<?!= incluir_('Scripts') ?>
+<?!= incluir_('Editor') ?>
+
+</body>
+</html>

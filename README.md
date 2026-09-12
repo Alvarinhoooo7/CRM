@@ -1,133 +1,243 @@
-# CRM de instalaciones · presentación
+# Servicio Técnico en Ruta
 
-Demo en Google Sheets + Apps Script: operación simulada, direcciones exactas con Google Maps, presupuesto de viáticos y botones para iniciar/terminar instalaciones. No necesita una configuración extensa para presentar el caso.
+Web de planificación para **33 equipos en 16 localidades**, con **10 técnicos y 6 camionetas Peugeot Partner**. Google Sheets guarda los datos y Apps Script calcula trayectos, jornadas, costos y órdenes de servicio.
 
-Base: **INACAP Santiago Sur, Av. Vicuña Mackenna 3864, Macul**, según la [dirección oficial de INACAP](https://portal.inacap.cl/sede-santiago-sur). Se corrigió la antigua dirección de San Miguel. Las coordenadas iniciales son aproximadas; las consultas nuevas a Maps usan la dirección escrita.
+**Versión vigente: `v2/apps-script/`, versión 2.1.0.** Se depuró la raíz eliminando las carpetas heredadas de v1 (`apps-script/`, `docs/`, `tests/`) para evitar conflictos de sincronización y mantener una base limpia.
 
-## Ejecutar la presentación
+Esta guía está escrita para los cuatro expositores. Leer primero las secciones 1–5 y luego practicar con el **[guion de presentación](v2/docs/PRESENTACION.md)**. Para entender el código, consultar la [arquitectura](v2/docs/ARQUITECTURA.md).
 
-1. En el libro vinculado, abra **Extensiones → Apps Script**.
-2. Seleccione el archivo `15_Presentacion.gs`, elija **`prepararDemo`** en la lista de funciones y pulse **Ejecutar**. Autorice los permisos. Si no aparece la función, guarde y recargue el editor; seleccione un `.gs`, no un HTML.
-3. Se crea/repara la estructura, se carga el caso y se planifica si no hay órdenes. Después se abre la UI. No registra instalaciones realizadas ni transfiere dinero.
-4. Recargue el libro. En el menú **CRM Servicio Tecnico**, use **Abrir presentación** para volver al panel.
-5. Para guardar desde la UI, use **Ver token para UI / AppSheet** en el menú y péguelo en **Acceso de coordinación**. Solo se conserva mientras esa página está abierta.
+## 1. Qué pide el caso
 
-El panel funciona como ventana del libro, sin publicar una web. Opcionalmente puede implementar una aplicación web para usuarios Google: `doGet` abre la misma presentación. **`clasp push` actualiza el código, no ejecuta funciones ni modifica las hojas.** Tampoco actualiza una URL de implementación con versión fija: para esa URL seleccione una nueva versión en **Implementar → Administrar implementaciones**.
+Fuente: [Estudio de caso 1.pdf](Estudio%20de%20caso%201.pdf). El nombre del archivo dice «1», pero contiene la planificación inicial y el **caso 2 de gestión tecnológica**. La última página permite cuatro expositores, establece una presentación de 15 minutos y pide informe PDF para el 14-09-2026.
 
-| Función ejecutable sin parámetros | Resultado |
+| Requisito | Dónde se demuestra |
 | --- | --- |
-| `prepararDemo` | Instala, completa el caso y planifica si no hay OT |
-| `abrirPresentacion` | Abre la UI dentro del libro |
-| `instalarCRM` | Repara estructura y carga tablas vacías |
-| `aplicarVistaSimple` | Muestra solo las seis hojas de trabajo |
-| `mostrarHojasAuxiliares` | Muestra tablas internas |
-| `verTokenIntegracion` | Muestra el token al coordinador |
-| `menuPlanificar` | Recalcula el plan con confirmación |
+| Asignar 10 técnicos y 6 camionetas | Planificación, Rutas y flota, Técnicos |
+| Instalación de 2 horas por equipo | Motor de trabajo en sitio e itinerario |
+| Capacitación de 30 minutos por equipo | Escenario inicial **Literal del enunciado** |
+| Rendimiento de 20 km/L | Presupuesto de combustible |
+| Calcular trayectos y peajes | Maps, catálogo y desglose de plazas |
+| Considerar alojamiento y alimentación | Noches por tramo, hotel y viático diario |
+| Determinar dinero necesario por técnico | Gastos → Transferencia por técnico |
+| Consultar ruta, implementos, hotel y camioneta | Orden de servicio y PDF |
+| Proponer y justificar una mejora | Comparación de escenarios y transporte |
 
-## Caso: 33 equipos y capacitación por equipo
+**Los grupos de tres del enunciado corresponden al trabajo académico.** Organizar también a los técnicos en cuadrillas de tres es una decisión nuestra; no es una exigencia textual sobre la dotación. Los cuatro estudiantes presentan una operación de diez técnicos: son grupos distintos.
 
-| Región | Localidad | Equipos |
-| --- | --- | ---: |
-| Atacama | Copiapó | 5 |
-| Coquimbo | Coquimbo | 2 |
-| Valparaíso | La Calera | 1 |
-| Valparaíso | San Antonio | 2 |
-| Metropolitana | Melipilla | 2 |
-| Metropolitana | Lo Barnechea | 3 |
-| Metropolitana | Puente Alto | 1 |
-| Metropolitana | Santiago | 3 |
-| Metropolitana | Pudahuel | 3 |
-| Metropolitana | Maipú | 3 |
-| Maule | Curicó | 1 |
-| Maule | Talca | 3 |
-| Biobío | San Pedro de la Paz | 1 |
-| Biobío | Penco | 1 |
-| Biobío | Tomé | 1 |
-| Biobío | Santa Juana | 1 |
-| **Total** | **16 localidades** | **33** |
+| Localidad | Equipos | Localidad | Equipos |
+| --- | ---: | --- | ---: |
+| Copiapó | 5 | Pudahuel | 3 |
+| Coquimbo | 2 | Maipú | 3 |
+| La Calera | 1 | Curicó | 1 |
+| San Antonio | 2 | Talca | 3 |
+| Melipilla | 2 | San Pedro de la Paz | 1 |
+| Lo Barnechea | 3 | Penco | 1 |
+| Puente Alto | 1 | Tomé | 1 |
+| Santiago | 3 | Santa Juana | 1 |
+| **Total** | **33** | **Localidades** | **16** |
 
-Nombres, contactos, direcciones de clientes, hoteles, tarifas y dotación son ejemplos, no reservas ni cotizaciones vigentes. La carga inicial supone 10 técnicos y 6 camionetas, una en mantención. Las órdenes se distribuyen por técnico; no hay necesariamente una OT por equipo.
+Las claves internas de algunas localidades no llevan tildes: `Copiapo`, `Maipu`, `Tome`. Se conservan para relacionar las tablas; la búsqueda admite tildes.
 
-`prepararDemo` completa requerimientos con IDs faltantes sin sobrescribir los existentes. Si ya hay plan, lo conserva; use **Planificar / actualizar presupuesto** para regenerarlo antes de comenzar la ejecución. No use «Reinstalar desde cero» sobre datos que quiera conservar.
+## 2. Funcionamiento de principio a fin
 
-## Hojas y configuración
+La coordinación ingresa un plan, revisa sus resultados y entrega una orden a cada técnico. **El motor evalúa las filas ingresadas; no genera automáticamente un óptimo global.** Las comparaciones de transporte y hotel/sobretiempo no cambian por sí solas el plan.
 
-Quedan visibles **CONFIG, REQUERIMIENTOS, ORDENES_TRABAJO, ITINERARIO, VIATICOS y GASTOS**. Las otras 16 hojas se ocultan, no se eliminan: el motor original usa esas tablas auxiliares. Puede mostrarlas desde el menú. No se generan materiales ni se usan pesos para elegir transporte.
+1. Ingresar con el correo y clave de demostración configurados en el servidor.
+2. Abrir **Planificación** y revisar direcciones, hotel, material de capacitación, tramos y parámetros.
+3. Guardar el formulario modificado. Guardar cambia las hojas; los resultados todavía muestran el cálculo anterior.
+4. Pulsar **Recalcular**. Se leen las hojas, se resuelven rutas y se ejecutan ambos escenarios.
+5. Revisar **Resumen** y corregir las alertas de error antes de comprometer la salida.
+6. Revisar **Gastos**: total de operación y monto propuesto para cada técnico.
+7. Abrir **Orden de servicio**, seleccionar técnico y revisar ruta, vehículo, hotel y checklist.
+8. Exportar el PDF en Drive o descargar el itinerario CSV en **Rutas y flota**.
 
-`CONFIG` conserva diez ajustes: semana, minutos de instalación, minutos de capacitación, alojamiento, colación con y sin pernoctación, reserva, diésel, pasaje micro/metro y tarifa bus por km. Importes en CLP; la reserva usa factor (`0.15` = 15%). Los ajustes avanzados anteriores se conservan en la propiedad `CONFIG_AVANZADA`; el resto utiliza los valores de `00_Config.gs`. Claves y token quedan en el servidor.
+### Las diez pantallas
 
-**Guardar no recalcula automáticamente.** Cambiar ajustes o direcciones afecta el próximo cálculo. «Actualizar vista» solo lee. «Planificar / actualizar presupuesto» reconstruye órdenes, trayectos y viáticos. Con una instalación iniciada, un viático transferido o un gasto real, se bloquea la reconstrucción; use un libro de demo nuevo para otro escenario. Esta versión mantiene un único plan operativo, no un histórico.
+| Pantalla | Información y acciones |
+| --- | --- |
+| Resumen | Equipos planificados, gasto, días, utilización, km, hotel, alertas y comparación de escenarios |
+| Rutas y flota | Cuadrillas, conductor, tramos, fuentes y camionetas; búsqueda por localidad/técnico, filtro diario, enlaces Maps y CSV |
+| Gastos | Categorías, localidades, composición del presupuesto y transferencias |
+| Técnicos | Tabla ordenable de carga, viaje, trabajo en sitio y ficha individual |
+| Calendario | Horas asignadas y holgura por día; simulación de una visita independiente |
+| Transporte | Comparación referencial de modos y decisión autopista/desvío |
+| Peajes | Catálogo, secuencias por localidad y estado estimado/verificado |
+| Orden de servicio | Ruta del técnico, hotel, camioneta, conductor, monto y materiales; exportación a PDF |
+| Planificación | Edición de destinos, tramos y parámetros con validación en servidor |
+| Guía del equipo | Recorrido de 15 minutos y respuestas a preguntas frecuentes |
 
-Edite cantidades en `REQUERIMIENTOS`. Para cambiar disponibilidad, muestre las auxiliares y edite `TECNICOS.ACTIVO` o `VEHICULOS.ESTADO`. No comparta ni versione propiedades del script.
+El técnico T10 queda de reserva en la siembra. Su orden no inventa tramos ni viáticos. Elegir un técnico es un filtro del panel compartido, **no autenticación individual**.
 
-## Direcciones exactas y Google Maps
+Las casillas de materiales de la orden sirven para verificar la salida mientras esa vista está abierta. No registran inventario ni entrega persistente: se reinician al regenerar la orden. La web tampoco registra instalaciones finalizadas ni realiza transferencias bancarias.
 
-1. En **Direcciones y Maps**, seleccione localidad e ingrese calle, número, comuna y Chile, o coordenadas. No pegue un enlace acortado.
-2. Pulse **Calcular ruta con Google Maps**. Se consultan ida y regreso por separado desde la base.
-3. Revise kilómetros, minutos, fuente y **Revisar ubicación en Google Maps**. La vista previa no modifica el sitio.
-4. Pulse **Confirmar punto y guardar ruta**. La vista previa vence a los diez minutos; editar la dirección invalida la confirmación anterior.
-5. Pulse **Planificar / actualizar presupuesto** para aplicar el cambio a agenda y viáticos.
+## 3. Plan inicial y escenarios
 
-Sin clave se utiliza el [servicio Maps de Apps Script](https://developers.google.com/apps-script/reference/maps/direction-finder), sujeto a cuotas y permisos. Para usar clave propia, habilite Routes API y facturación en Google Cloud y pegue su clave en **Conexión Google Maps**. La integración usa [Routes API: computeRoutes](https://developers.google.com/maps/documentation/routes/reference/rest/v2/TopLevel/computeRoutes), con direcciones y campos de distancia, duración y coordenadas. La clave no se devuelve al navegador.
+La siembra contiene **23 tramos en cinco días de operación**:
 
-Si falla Google o no encuentra ruta, aparece un error y se conserva la dirección anterior. No se presenta una estimación como dato real. La consulta es **por carretera**, con duración estimada sin tráfico en vivo; no es un itinerario real de micro/metro ni un vuelo. Tarifas, tiempos de transporte público y peajes siguen siendo supuestos. Cambiar un sitio invalida sus enlaces con otras localidades, que se estiman geográficamente hasta recalcularlos.
+| Cuadrilla | Técnicos | Vehículo | Circuito |
+| --- | --- | --- | --- |
+| C1 | T01–T03 | V1 | Coquimbo → Copiapó → Coquimbo → La Calera → base |
+| C2 | T04–T06 | V2 | Curicó → Talca → Santa Juana → San Pedro de la Paz → Penco → Tomé → base |
+| C3 | T07–T09 | V3 | RM, Melipilla y San Antonio, con regreso diario |
 
-La actualización masiva del menú es una función heredada de Distance Matrix. Para la presentación y claves nuevas de Routes API, use el formulario: consulta solo las dos rutas necesarias por localidad.
+V4–V6 quedan sin asignación. La base de siembra es INACAP Santiago Sur, Av. Vicuña Mackenna 3864, Macul. Direcciones de clientes y hoteles son referencias demostrativas que deben confirmarse para operar.
 
-## Presupuesto y decisiones
+La fecha inicial de operación es **21-09-2026**; no debe confundirse con la entrega académica del 14-09-2026. El calendario omite fines de semana cuando está habilitado y los feriados cargados en CONFIG.
 
-Se comparan camioneta disponible, avión con bus/micro de conexión, bus interurbano y micro/metro urbano. En **Direcciones y Maps → Comparar transportes** puede elegir técnicos y días para evaluar un destino individual. Los circuitos de varias localidades se planifican por tierra en esta demo; el modelo aéreo individual no cubre vuelos entre varios aeropuertos. **Uber, pesos, fletes y costos de materiales están excluidos.** La comparación considera desembolso, alojamiento, colación y horas de viaje. Es una heurística para presentar decisiones, no una prueba de óptimo global ni una verificación de horarios comerciales.
+| Aspecto | Literal del enunciado | Mejora propuesta |
+| --- | --- | --- |
+| Identificador | `LITERAL_PDF` | `OPERACION_REAL`, nombre interno heredado |
+| Capacitación | 30 minutos por equipo | 15 minutos por localidad |
+| Sesiones | 33 | 16 |
+| Tiempo de sesiones | 16,5 horas | 4 horas |
+| Condición | Requisito base | Preparación digital previa, propuesta por validar |
 
-El plan incluye salida, llegada, instalación, capacitación, colación y regreso. La transferencia propuesta por técnico suma:
+**La diferencia es 12,5 horas de sesiones, no 12,5 horas-persona.** El motor contabiliza la permanencia de toda la cuadrilla; con tres técnicos, la diferencia es 37,5 horas-persona. No supone que los tres impartan capacitación, sino que permanecen asignados.
 
-`alojamiento + colación + pasajes y conexiones + combustible + peajes + reserva`, redondeada hacia arriba a miles de pesos.
+Ambos escenarios usan las mismas filas de PLAN. Si el literal supera una jornada, hay que redistribuir los tramos. Elegir la mejora para ocultar esa alerta no demuestra cumplimiento del PDF. Los antiguos totales monetarios del README no se consideran resultados vigentes: dependen de las rutas, el escenario y la hoja actual.
 
-Combustible y peajes se asignan una sola vez por cuadrilla al conductor/líder. Los pasajes se reparten y **sí se suman al total a transferir**. Marcar «transferido» es un registro administrativo; no hay integración bancaria. Mano de obra y costos de rentabilidad no son dinero de viáticos. El costo de oportunidad compara opciones y no se suma otra vez a la transferencia.
+## 4. Fórmulas para explicar el presupuesto
 
-Amadeus y CNE siguen como integraciones opcionales heredadas; no son necesarias para la demo. El retorno de Amadeus se estima a partir de una tarifa de ida y se identifica como tal.
+### Trabajo en sitio
 
-**Propuesta para exponer:** agrupar visitas por zona; comparar avión/bus en viajes largos y micro/metro en ciudad; aprovechar camionetas para circuitos con varias visitas. No comprar otra camioneta basándose solo en estos 33 equipos. Medir duraciones reales y pendientes durante varias operaciones: si faltan horas técnicas, evaluar apoyo temporal; si hay técnicos disponibles pero falta movilidad, comparar arriendo puntual con compra. La UI muestra la justificación de cada despacho y los equipos sin asignar.
-
-## Técnico y AppSheet
-
-La pestaña **Técnico** permite elegir técnico → iniciar → confirmar capacitación → terminar. Guarda inicio y término reales, duración, estado y marcas. Repetir inicio/cierre no reemplaza la primera marca. Rechaza cierre sin inicio o sin capacitación y valida que el técnico coincida con la OT. Es una vista de coordinación con token compartido, no autenticación individual.
-
-Para una demo sencilla en AppSheet, conecte `ORDENES_TRABAJO` (clave `OT_ID`), `TECNICOS` (clave `TECNICO_ID`) y `VIATICOS` (clave `VIATICO_ID`). Configure correos reales en `TECNICOS.EMAIL`, inicio de sesión y filtro de seguridad para órdenes:
+Se supone que cada técnico puede instalar un equipo de forma independiente. Es una hipótesis de paralelización del modelo.
 
 ```text
-[TECNICO_ID] = LOOKUP(USEREMAIL(), "TECNICOS", "EMAIL", "TECNICO_ID")
+Instalación = techo(equipos / técnicos presentes) × 2 horas
+Capacitación literal = equipos × 0,5 horas
+Tiempo en sitio = instalación + capacitación
+Horas del tramo = viaje + tiempo en sitio
+Horas-persona = horas del tramo × técnicos presentes
 ```
 
-Cree dos acciones **Data: set the values of some columns in this row**:
+Ejemplo: cinco equipos con tres técnicos requieren dos tandas, es decir **4 h de instalación**. La capacitación literal suma **2,5 h**. La visita ocupa **6,5 h**, más viaje. La mejora propuesta reduce esa visita a 4,25 h más viaje.
 
-| Acción | Condición de visibilidad | Valores |
+Solo la **primera visita** a una localidad ejecuta el trabajo. Volver por Coquimbo para dormir o retornar a base no duplica equipos. El modelo no reparte automáticamente una localidad entre varias visitas.
+
+### Traslado, hotel y viático
+
+```text
+Litros = km del tramo / 20
+Combustible = litros × precio del diésel
+Desgaste = km × costo de desgaste por km
+Hotel individual = noches × técnicos × tarifa
+Hotel compartido = noches × techo(técnicos / 2) × tarifa de habitación
+Viático = días desplegados del técnico × tarifa diaria
+```
+
+La referencia es **$25.000 por técnico-día, incluida alimentación**, y **$50.000 por noche individual**. Son decisiones del modelo, no cotizaciones. Un técnico con cuatro tramos el mismo día recibe un solo viático.
+
+El peaje usa las plazas del catálogo local 2026 y ajustes. En corredor común se consideran las plazas que diferencian ambos extremos; entre corredores distintos se aproxima pasando por base. **Una plaza pagada de ida no queda gratis al regreso:** cada cruce vuelve a costearse. Un cero entre dos localidades puede significar que el catálogo no incluye una plaza entre ellas y debe contrastarse con la ruta real.
+
+El desvío sin peajes se compara por combustible, desgaste y tiempo adicional, con límites de desvío y ahorro mínimo. Maps y una secuencia estimada no equivalen a una auditoría de TAG.
+
+### Jornada y sobretiempo
+
+Se suman horas por cuadrilla y día. El semáforo usa la jornada efectiva, contractual y extra permitida; los valores de siembra son 7,4 h, 8,4 h y hasta 2 h adicionales. Son umbrales del modelo académico: **no certifican cumplimiento laboral**.
+
+```text
+Horas extra = máximo(0, horas de la jornada − jornada contractual)
+Costo extra = horas extra × técnicos × costo hora × recargo
+```
+
+La comparación con hotel orienta la decisión, pero no cambia las noches de PLAN. El control heredado llamado «semanal» acumula extra sobre el período completo: para períodos de más de una semana debe revisarse por semana real.
+
+### Total operativo frente a transferencia
+
+```text
+Subtotal operativo = combustible + peajes + desgaste + pasajes + flete
+                  + arriendo + conexiones + hotel + viáticos
+Reserva operativa = redondear(subtotal operativo × porcentaje de imprevistos)
+Total operativo = subtotal operativo + sobretiempo + reserva operativa
+
+Base personal = viático + hotel + combustible + peajes pagados por el técnico
+Reserva personal = redondear(base personal × porcentaje de imprevistos)
+Transferencia = techo((base personal + reserva personal) / paso) × paso
+```
+
+La configuración decide cuáles de esos conceptos se adelantan al técnico. El TAG pagado por la empresa es costo operativo, pero no dinero que recibe el conductor. El combustible y peaje en efectivo se asignan al conductor o se prorratean. Rotar conductor puede cambiar cuánto recibe cada integrante.
+
+**La suma de transferencias no tiene por qué coincidir con el total operativo:** desgaste, gastos empresariales, sobretiempo y redondeo explican la diferencia. La nómina ordinaria completa no está incluida; el presupuesto no es un estado de resultados contable.
+
+El editor operativo admite **camionetas**. Bus y avión son comparaciones referenciales. El costeo heredado de pasajes entre localidades y sus adelantos no cubre un circuito multimodal completo; no presentar esas alternativas como despachos o reservas ya ejecutables.
+
+## 5. Datos y límites del sistema
+
+| Dato | Origen | Interpretación |
 | --- | --- | --- |
-| Iniciar instalación | `AND(IN([ESTADO], {"PLANIFICADA", "ASIGNADA"}), ISBLANK([HORA_INICIO_REAL]))` | `HORA_INICIO_REAL = NOW()`, `ESTADO = "EN_EJECUCION"` |
-| Terminar instalación | `AND([ESTADO] = "EN_EJECUCION", ISNOTBLANK([HORA_INICIO_REAL]), [CAPACITACION_OK] = "SI")` | `HORA_FIN_REAL = NOW()`, `DURACION_REAL_MIN = TOTALMINUTES(NOW() - [HORA_INICIO_REAL])`, `ESTADO = "COMPLETADA"`, `ACTUALIZADO = NOW()` |
+| Dotación, equipos, 2 h, 30 min, 20 km/L | PDF | Requisitos base |
+| Cuadrillas, jornada, base y viático | Decisiones/supuestos | Deben justificarse |
+| Km y tiempo | Maps de Apps Script, con caché | Estimación de viaje |
+| Distancia de respaldo | Columnas de DESTINOS | Revisar fuente y alertas |
+| Peajes | Catálogo local basado en documentos MOP | Verificar secuencia, horario y categoría |
+| Hoteles y pasajes | Datos de referencia | No son reservas confirmadas |
+| Horas y montos | Motor JavaScript | Resultados sobre las filas ingresadas |
 
-Permita confirmar `CAPACITACION_OK` antes del cierre. Las acciones directas sirven para la presentación; no generan `MARCAS_TIEMPO` ni cierre automático del requerimiento. No combine escrituras directas y llamadas al backend para la misma acción.
+Consultar la [guía de tarifas de camionetas](GUIA_TARIFAS_CAMIONETAS_2026.md). Los PDF fuente están en `../Valores Porticos, Peajes/`. Esta implementación no renovó cotizaciones comerciales.
 
-Para el flujo completo, configure un bot con [webhook JSON POST de AppSheet](https://support.google.com/appsheet/answer/11511244?hl=en) hacia una implementación accesible por ese bot, sin cambiar previamente el estado de la OT:
+La web planifica: **no confirma instalaciones realizadas, no envía capacitación, no controla stock, no reserva hoteles ni mueve dinero**. Las funciones de ejecución y AppSheet de v1 no se trasladaron a v2. Los indicadores dicen «planificados» por esa razón.
 
-```json
-{"accion":"iniciarOT","token":"TOKEN_DEL_SERVIDOR","otId":"<<[OT_ID]>>","tecnicoId":"<<[TECNICO_ID]>>"}
-```
+## 6. Instalación y sincronización con clasp
 
-```json
-{"accion":"finalizarOT","token":"TOKEN_DEL_SERVIDOR","otId":"<<[OT_ID]>>","tecnicoId":"<<[TECNICO_ID]>>","realizada":true,"capacitacionOk":true}
-```
-
-Dispare el segundo bot solo tras confirmar capacitación. Guarde el token en el bot, no en filas descargables por técnicos. Verifique `datos.ok` y `datos.mensaje`: ContentService no establece códigos HTTP personalizados. Una web con inicio de sesión Google no admite automáticamente un webhook sin sesión; configure un endpoint separado o puente autorizado, sin hacer público el panel. [Call a script](https://support.google.com/appsheet/answer/11997142?hl=en) requiere proyecto independiente: esa tarea no admite scripts vinculados a hojas. El bot, permisos y sincronización se configuran en AppSheet; el repositorio no los crea.
-
-## Validación y sincronización
+### Proyecto ya instalado
 
 ```powershell
-node tests/demo.cjs
-cd apps-script
+# Desde CRM
+node v2/tests/web.cjs
+node v2/tests/interfaz.cjs
+Set-Location v2/apps-script
 clasp status
 clasp push
 ```
 
-La prueba verifica sintaxis `.gs`/HTML, los 33 equipos asignados, capacitación, pasajes en transferencias, replanificación, inicio/cierre, token y confirmación/invalidez de rutas con proveedor simulado. No consume APIs ni sustituye probar en Google. El escenario base probado (2026-W38) produce 10 despachos, 23 OT y $1.648.000 de transferencias referenciales. Cambia al ajustar rutas, tarifas y dotación.
+`clasp status` debe incluir `08_Editor.gs` y `Editor.html`. Después de subir, actualizar la URL existente en **Implementar → Administrar implementaciones → Editar → Nueva versión → Implementar**.
 
-`apps-script/.clasp.json` guarda la vinculación local y no se versiona. `.local-backup/` conserva el código remoto anterior cuando se realiza respaldo; tampoco se publica.
+`clasp push` sube archivos: no ejecuta funciones, no instala hojas y no actualiza por sí solo una implementación con versión fija. Referencia: [guía oficial de clasp](https://developers.google.com/apps-script/guides/clasp).
+
+### Libro nuevo
+
+1. Elegir la hoja de cálculo y abrir **Extensiones → Apps Script**.
+2. Vincular `v2/apps-script/.clasp.json` al proyecto correcto y subir el código. La vinculación está excluida de Git.
+3. En **Configuración del proyecto → Propiedades del script**, definir `ACCESO_EMAIL` y `ACCESO_CLAVE_INICIAL`, con una clave elegida de al menos 10 caracteres.
+4. Ejecutar `configurarAcceso_`. Guarda el ID del libro, calcula el hash y elimina la propiedad de clave inicial.
+5. Recargar la hoja y usar **Servicio Técnico → Crear o restaurar hojas base**.
+6. Usar **Actualizar rutas con Google Maps** y **Recalcular y validar plan**. Revisar km, tiempos y alertas.
+7. Abrir el panel desde el menú o crear una implementación de aplicación web. Mantener acceso limitado a las cuentas de la presentación cuando Google lo permita.
+
+Subir código conserva la clave existente. No ejecutar la configuración de acceso para actualizar solo la interfaz. No hay una nueva clave predeterminada en el código.
+
+**«Reinstalar desde cero» borra los datos de trabajo.** «Crear o restaurar hojas base» conserva hojas existentes; no garantiza reparar todos los rangos dañados de un libro antiguo. Revisar la estructura antes de reinstalar.
+
+Las funciones internas ahora terminan en `_`, lo que impide su llamada directa desde el navegador. Los menús ya usan los nombres actualizados. Se mantienen tres hojas de trabajo visibles y auxiliares ocultas; consultar la arquitectura para su función.
+
+### Vista previa sin Google
+
+```powershell
+node v2/tests/preview.cjs
+```
+
+Abrir `http://127.0.0.1:4173` con cualquier correo y clave de prueba. Usa **rutas sintéticas**, sin Google ni datos privados. Permite ensayar pantallas; guardar en Sheets y exportar en Drive están deshabilitados. No presentar esas cifras como el presupuesto real. `Ctrl+C` cierra el servidor.
+
+## 7. Acceso y colaboración
+
+El login entrega un token; cada endpoint de datos/escritura exige sesión. El navegador conserva el token en memoria y el servidor en caché por hasta seis horas. La caché puede expulsarlo antes. Recargar requiere volver a ingresar.
+
+Las funciones internas no se exponen por RPC. Los campos se validan en servidor. El guardado de destinos y plan usa un bloqueo y una revisión del contenido: si otro integrante guardó primero, se rechaza el borrador antiguo. Evitar edición manual simultánea en Sheets: la edición directa de la hoja no respeta el bloqueo del script.
+
+El acceso es compartido para coordinación y demo; no hay roles individuales. La propiedad heredada `MODO_ACCESO` **no implementa** por sí sola identificación Google por técnico. Producción requiere identidad y permisos individuales.
+
+## 8. Verificación y estado de entrega
+
+- `node v2/tests/web.cjs`: 18 comprobaciones del motor, escenarios, fechas serializadas, sesión, simulación y validación de planificación.
+- `node v2/tests/interfaz.cjs`: diez pantallas y flujos con DOM/RPC simulados: enlace directo, búsqueda, estado vacío, reserva, escenarios y borrador.
+- `ejecutarPruebas_` en Apps Script: diagnóstico contra la hoja vigente y sus rutas. Requiere ejecutarlo en Google.
+
+**Pruebas locales ejecutadas y sincronización completada.** El proyecto se sincronizó exitosamente con Google Apps Script mediante `clasp push` desde `v2/apps-script/` sobre el proyecto vinculado.
+
+Antes de presentar, completar los [pendientes de integración](v2/docs/PENDIENTES.md): login, Maps, guardado, escenarios y PDF en la cuenta del equipo.
+
+## 9. Material para los cuatro integrantes
+
+- [Guion de 15 minutos y preguntas](v2/docs/PRESENTACION.md).
+- [Arquitectura y mantenimiento](v2/docs/ARQUITECTURA.md).
+- [Pendientes de puesta en marcha](v2/docs/PENDIENTES.md).

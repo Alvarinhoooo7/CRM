@@ -53,7 +53,16 @@ function instalarSistema_(forzar) {
 function construirHoja_(libro, nombre, forzar, reporte, constructor) {
   var hoja = libro.getSheetByName(nombre);
 
-  if (hoja && !forzar && hoja.getLastRow() > 1) {
+  var incompatible = false;
+  if (nombre === HOJAS.CONFIG.nombre && hoja) {
+    try {
+      incompatible = !libro.getRangeByName('P_TECNICOS') || !libro.getRangeByName('P_CAMIONETAS');
+    } catch (e) {
+      incompatible = true;
+    }
+  }
+
+  if (hoja && !forzar && !incompatible && hoja.getLastRow() > 1) {
     reporte.conservadas.push(nombre);
     reporte.mensajes.push('La hoja ' + nombre + ' ya tenia datos y se conservo. ' +
                           'Use "Reinstalar desde cero" si quiere reconstruirla.');

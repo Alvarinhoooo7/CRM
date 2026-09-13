@@ -20,6 +20,25 @@ if (window.google && google.charts) {
    FORMATO
    ========================================================================== */
 
+
+function nomT(cod) {
+  if (!DATOS || !DATOS.tecnicos || !cod) return cod;
+  var t = DATOS.tecnicos.filter(function(x) { return x.codigo === cod; })[0];
+  return t ? t.nombre : cod;
+}
+function nomC(cod) {
+  if (!DATOS || !DATOS.flota || !cod) return cod;
+  var f = DATOS.flota.filter(function(x) { return x.codigo === cod; })[0];
+  return f ? f.nombre : cod;
+}
+function fmtD(d) {
+  return d ? d.replace('D', 'Día ') : '';
+}
+function fmtC(txt) {
+  if (!txt) return '';
+  return txt.split(',').map(function(c) { return nomT(c.trim()); }).join(', ');
+}
+
 function pesos(n) {
   if (n === null || n === undefined || n === 'no ejecutable') return '—';
   return '$' + Math.round(n).toLocaleString('es-CL');
@@ -623,7 +642,7 @@ function dibujarRutas() {
     .filter(function (t) { return t.comparacionRuta; })
     .map(function (t) {
       var c = t.comparacionRuta;
-      return '<tr><td>' + t.dia + ' ' + t.cuadrilla + '</td>' +
+      return '<tr><td>' + fmtD(t.dia) + '<br><span class="chico">' + fmtC(t.cuadrilla) + '</span></td>' +
         '<td><b>' + escapar(t.desde) + ' → ' + escapar(t.hasta) + '</b></td>' +
         '<td class="num">' + numero(t.km, 1) + ' km</td>' +
         '<td class="num">' + numero(t.horasViaje, 2) + ' h</td>' +
@@ -712,8 +731,8 @@ function cargarOrden() {
 
       var tramos = o.tramos.map(function (t) {
         var fecha = t.fecha ? new Date(t.fecha).toLocaleDateString('es-CL') : '';
-        return '<tr><td>' + t.dia + '<br><span class="chico">' + fecha + '</span></td>' +
-          '<td>' + t.cuadrilla + '<br><span class="chico">' + t.vehiculo +
+        return '<tr><td>' + fmtD(t.dia) + '<br><span class="chico">' + fecha + '</span></td>' +
+          '<td>' + fmtC(t.cuadrilla) + '<br><span class="chico">' + nomC(t.vehiculo) +
             (t.conduce ? ' · CONDUCE' : '') + '</span></td>' +
           '<td><b>' + escapar(t.desde) + ' → ' + escapar(t.hasta) + '</b>' +
             '<br><span class="chico">' + escapar(t.direccion) + '</span></td>' +
@@ -814,7 +833,7 @@ function llenarSelectores() {
 
   var dias = [];
   for (var i = 1; i <= DATOS.resultado.parametros.P_HORIZONTE_MAX_DIAS; i++) {
-    dias.push({ codigo: 'D' + i, etiqueta: 'D' + i });
+    dias.push({ codigo: 'D' + i, etiqueta: 'Día ' + i });
   }
   llenar('simDia', dias, 'codigo', 'etiqueta');
 
@@ -883,7 +902,7 @@ function dibujarGraficos() {
   var dias = Object.keys(porDia).sort(function (a, b) {
     return Number(a.substring(1)) - Number(b.substring(1)); });
   pintar('graficoGastoDia', 'ColumnChart',
-    [['Dia', 'Gasto']].concat(dias.map(function (d) { return [d, porDia[d]]; })),
+    [['Día', 'Gasto']].concat(dias.map(function (d) { return [fmtD(d), porDia[d]]; })),
     opciones({ colors: ['#2E5C9A'] }));
 
   // Horas en sitio contra traslado

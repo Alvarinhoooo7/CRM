@@ -170,6 +170,11 @@ function mostrarError(e) {
 
 function mostrar(vista) {
   if (!document.getElementById('vista-' + vista)) vista = 'resumen';
+
+  // Cada vista explica sola que es y como leerla, para quien la abre
+  // por primera vez. Vive en Ayuda.html.
+  inyectarAyuda(vista);
+  if (vista === 'guia') dibujarManual();
   document.querySelectorAll('.vista').forEach(function (v) { v.classList.remove('activa'); });
   document.querySelectorAll('.pestana').forEach(function (p) { p.classList.remove('activa'); });
   var destino = document.getElementById('vista-' + vista);
@@ -635,6 +640,81 @@ function dibujarModos() {
     '<tr><th>Localidad</th>' + modos +
     '<th>Menor costo ejecutable</th><th>Menor tiempo con datos</th><th>Observación</th></tr>' + filas +
     '<tr><td colspan="99" class="chico">Esta tabla compara alternativas por localidad. No cambia las camionetas ni los técnicos de PLAN. La decisión final se registra al agendar una orden.</td></tr>';
+
+  var sel = document.getElementById('selectorDetalleModo');
+  if (sel) {
+    var previo = sel.value;
+    sel.innerHTML = DATOS.comparadorModos.map(function (c) {
+      return '<option value="' + escapar(c.localidad) + '">' + escapar(c.localidad) +
+             '</option>'; }).join('');
+    if (previo) sel.value = previo;
+    dibujarDetalleModo();
+  }
+}
+
+/**
+ * Detalle completo de un destino: cada modo con su desglose de tiempo y de
+ * costo, en lenguaje comun. Existe para que nadie tenga que creer en el total:
+ * puede ver de donde sale cada hora y cada peso.
+ */
+function dibujarDetalleModo() {
+  var sel = document.getElementById('selectorDetalleModo');
+  var caja = document.getElementById('detalleModo');
+  if (!sel || !caja) return;
+
+  var c = DATOS.comparadorModos.filter(function (x) {
+    return x.localidad === sel.value; })[0];
+  if (!c) { caja.innerHTML = ''; return; }
+
+  var tarjetas = c.opciones.map(function (o) {
+    var gana = o.modo === c.masEconomico;
+
+    var tiempo = (o.desgloseTiempo || []).map(function (x) {
+      return '<div class="desglose-fila"><span class="concepto">' + escapar(x.concepto) +
+        '<span class="detalle">' + escapar(x.detalle || '') + '</span></span>' +
+        '<span class="valor">' + numero(x.horas, 2) + ' h</span></div>';
+    }).join('');
+
+    var costo = (o.desgloseCosto || []).map(function (x) {
+      return '<div class="desglose-fila"><span class="concepto">' + escapar(x.concepto) +
+        '<span class="detalle">' + escapar(x.detalle || '') + '</span></span>' +
+        '<span class="valor">' + pesos(x.monto) + '</span></div>';
+    }).join('');
+
+    return '<div class="tarjeta-modo' + (gana ? ' ganadora' : '') +
+      (o.aplicable ? '' : ' no-aplica') + '">' +
+      '<h3><span>' + o.modo + (gana ? ' · más económico' : '') + '</span>' +
+      '<span class="monto-modo">' + pesos(o.total) + '</span></h3>' +
+      '<div class="chico">' + o.dias + ' día(s) de viaje · ' + o.noches +
+        ' noche(s) de hotel · ' + numero(o.horasIda, 2) + ' h de ida</div>' +
+      (o.nota ? '<div class="ayuda-ojo" style="margin-top:10px">' + escapar(o.nota) +
+                '</div>' : '') +
+
+      (tiempo ? '<div class="desglose"><h3 style="font-size:11px;text-transform:uppercase;' +
+        'letter-spacing:.5px;color:var(--tenue);margin:0 0 6px">De dónde salen las horas' +
+        '</h3>' + tiempo +
+        '<div class="desglose-total"><span>Total de ida, puerta a puerta</span>' +
+        '<span>' + numero(o.horasIda, 2) + ' h</span></div></div>' : '') +
+
+      (costo ? '<div class="desglose"><h3 style="font-size:11px;text-transform:uppercase;' +
+        'letter-spacing:.5px;color:var(--tenue);margin:0 0 6px">De dónde salen los pesos' +
+        '</h3>' + costo +
+        '<div class="desglose-total"><span>Transporte</span><span>' +
+        pesos(o.transporte) + '</span></div>' +
+        '<div class="desglose-fila"><span class="concepto">Hotel</span>' +
+        '<span class="valor">' + pesos(o.hotel) + '</span></div>' +
+        '<div class="desglose-fila"><span class="concepto">Viáticos</span>' +
+        '<span class="valor">' + pesos(o.viatico) + '</span></div>' +
+        '<div class="desglose-total"><span>TOTAL DEL VIAJE</span><span>' +
+        pesos(o.total) + '</span></div></div>' : '') +
+      '</div>';
+  }).join('');
+
+  caja.innerHTML =
+    '<p class="ayuda">Viaje completo de ida y vuelta a <b>' + escapar(c.localidad) +
+    '</b> para una cuadrilla de ' + c.tecnicos + ' técnicos que instala ' + c.equipos +
+    ' equipo(s). Todos los totales incluyen hotel y viáticos, no solo el pasaje.</p>' +
+    '<div class="rejilla rejilla-3">' + tarjetas + '</div>';
 }
 
 function dibujarRutas() {

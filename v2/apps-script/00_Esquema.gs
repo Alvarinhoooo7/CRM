@@ -42,7 +42,7 @@
 
 var APP = {
   NOMBRE: 'Servicio Tecnico en Ruta',
-  VERSION: '2.1.0',
+  VERSION: '3.0.0',
   CASO: 'Estudio de caso 2 · INACAP Santiago Sur · entrega 14-09-2026',
   ZONA_HORARIA: 'America/Santiago',
   LOCALE: 'es-CL',
@@ -610,32 +610,57 @@ var ESQUEMA_CONFIG = [
         validacion: { valores: [true, false] },
         nota: 'Para cuadrillas que trabajan dentro de la RM sin necesidad de camioneta.' },
 
-      { clave: 'P_HERRAMIENTAS_TRANSPORTABLES', etiqueta: 'Las herramientas pueden viajar sin camioneta',
+      { clave: 'P_HERRAMIENTAS_TRANSPORTABLES', etiqueta: 'Las herramientas caben en un bolso y pueden viajar sin camioneta',
         valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
         validacion: { valores: [true, false] },
-        nota: 'PDF: las 6 camionetas vienen "con sus correspondientes herramientas". ' +
-              'Verdadero significa que el set viaja como equipaje facturado o carga, con ' +
-              'el costo de P_FLETE_HERRAMIENTAS. Si se pone en falso, bus y avion dejan ' +
-              'de ser ejecutables y el comparador pasa a ser solo analisis: es el modo ' +
-              'que demuestra cuanto cuesta la restriccion.' },
+        nota: 'SI. Todo lo que se necesita para instalar cabe en un bolso de herramientas ' +
+              'comun: taladro, destornilladores, crimpeadora, multimetro, tester y ' +
+              'repuestos menores. Un bolso por tecnico. Por eso bus y avion SI son ' +
+              'ejecutables y no solo teoricos. Lo que no cabe en un bolso es la escalera ' +
+              'telescopica: si el trabajo la exige, ese destino se hace en camioneta.' },
 
-      { clave: 'P_FLETE_HERRAMIENTAS', etiqueta: 'Costo de trasladar el set de herramientas',
-        valor: 0, unidad: '$/tramo', tipo: 'moneda', fuente: 'SUPUESTO', critico: true,
+      { clave: 'P_FLETE_HERRAMIENTAS', etiqueta: 'Costo de llevar el bolso en bus',
+        valor: 0, unidad: '$/tramo', tipo: 'moneda', fuente: 'JEFATURA', critico: true,
         validacion: { min: 0, max: 500000 },
-        nota: 'Equipaje sobredimensionado o encomienda por cuadrilla y por tramo, en bus ' +
-              'o avion. Se suma al costo de esos modos: sin esto el comparador los haria ' +
-              'ganar artificialmente.' },
+        nota: 'En bus interurbano el bolso viaja gratis en la bodega del vehiculo, por eso ' +
+              'el valor es 0. Se deja configurable por si una empresa cobra encomienda. ' +
+              'Para el avion NO se usa este parametro: el equipaje de bodega tiene su ' +
+              'propio cobro por persona.' },
 
-      { clave: 'P_TRASLADO_AEROPUERTO', etiqueta: 'Traslado terminal - ciudad por trayecto',
+      { clave: 'P_EQUIPAJE_BODEGA_AVION', etiqueta: 'Equipaje de bodega en avion, por tecnico y por tramo',
+        valor: 18000, unidad: '$/tecnico/tramo', tipo: 'moneda', fuente: 'SUPUESTO', critico: true,
+        validacion: { min: 0, max: 200000 },
+        nota: 'ESTE ES EL COSTO QUE MAS SE OLVIDA AL COTIZAR UN VUELO. Las herramientas ' +
+              'NO pueden ir en cabina: taladros, destornilladores y alicates estan ' +
+              'prohibidos en el equipaje de mano por seguridad aerea. El bolso obliga a ' +
+              'facturar equipaje, y las tarifas baratas que se ven en internet NO lo ' +
+              'incluyen. Son tres bolsos para una cuadrilla de tres, en la ida y en la ' +
+              'vuelta: seis cobros por viaje.' },
+
+      { clave: 'P_TRASLADO_AEROPUERTO', etiqueta: 'Traslado terminal o aeropuerto a la ciudad, por trayecto',
         valor: 10000, unidad: '$', tipo: 'moneda', fuente: 'SUPUESTO',
         validacion: { min: 0, max: 200000 },
-        nota: 'Ida y vuelta al aeropuerto o al terminal de buses, por cuadrilla.' },
+        nota: 'Por cuadrilla y por trayecto. Se cobra CUATRO veces en un viaje en avion: ' +
+              'base al aeropuerto de Santiago, aeropuerto de destino a la ciudad, y los ' +
+              'dos de vuelta.' },
 
-      { clave: 'P_CHECKIN_AEROPUERTO_H', etiqueta: 'Tiempo previo al vuelo',
-        valor: 1.5, unidad: 'h', tipo: 'numero', fuente: 'SUPUESTO',
+      { clave: 'P_TIEMPO_A_AEROPUERTO_H', etiqueta: 'Tiempo de la base al aeropuerto o terminal',
+        valor: 0.75, unidad: 'h', tipo: 'numero', fuente: 'SUPUESTO',
+        validacion: { min: 0, max: 4 },
+        nota: 'Desde la base en Macul hasta el aeropuerto de Pudahuel. Es jornada del ' +
+              'tecnico y por eso cuenta.' },
+
+      { clave: 'P_CHECKIN_AEROPUERTO_H', etiqueta: 'Tiempo de check-in y embarque',
+        valor: 2, unidad: 'h', tipo: 'numero', fuente: 'SUPUESTO',
         validacion: { min: 0, max: 6 },
-        nota: 'Se suma a las horas de viaje del modo Avion: un vuelo de 1,5 h no son ' +
-              '1,5 h de jornada.' },
+        nota: 'Dos horas, no una: con equipaje que facturar hay que llegar antes. Las ' +
+              'aerolineas cierran el mostrador 40 minutos antes del vuelo en cabotaje.' },
+
+      { clave: 'P_RETIRO_EQUIPAJE_H', etiqueta: 'Tiempo de desembarque y retiro de equipaje',
+        valor: 0.5, unidad: 'h', tipo: 'numero', fuente: 'SUPUESTO',
+        validacion: { min: 0, max: 3 },
+        nota: 'Bajar del avion y esperar los bolsos en la cinta. Se cuenta en cada ' +
+              'aterrizaje, ida y vuelta.' },
 
       { clave: 'P_ARRIENDO', etiqueta: 'Arriendo de vehiculo en destino',
         valor: 15000, unidad: '$/dia', tipo: 'moneda', fuente: 'SUPUESTO', critico: true,
@@ -918,24 +943,30 @@ var ESQUEMA_TABLAS = {
     columnas: ['Orden', 'Item', 'Categoria'],
     tipos: ['entero', 'texto', 'texto'],
     nota: 'PDF caso 2: "cada tecnico pueda verificar su ruta, sus implementos y ' +
-          'materiales a utilizar". Se imprime con casillas en su orden de servicio.',
+          'materiales a utilizar". Se imprime con casillas en la orden de servicio. La ' +
+          'CATEGORIA dice donde va cada cosa y es lo que decide si la cuadrilla puede ' +
+          'viajar sin camioneta: BOLSO son los implementos que caben en el bolso de ' +
+          'herramientas de cada tecnico, y por lo tanto pueden ir en bus o en avion; ' +
+          'VEHICULO es lo que solo se puede llevar en camioneta y obliga a ese modo; ' +
+          'PERSONAL lo lleva cada uno encima.',
     filas: [
-      [ 1, 'Multimetro y pinza amperimetrica calibrados', 'Instrumentos'],
-      [ 2, 'Crimpeadora, conectores RJ45 y tester de red', 'Redes'],
-      [ 3, 'Kit de fibra optica: fusionadora, pigtails y alcohol isopropilico', 'Redes'],
-      [ 4, 'Taladro percutor, brocas y tarugos', 'Herramientas'],
-      [ 5, 'Set de destornilladores aislados y llaves ajustables', 'Herramientas'],
-      [ 6, 'Escalera telescopica, amarras, cinta aisladora y canaletas', 'Herramientas'],
-      [ 7, 'EPP: casco, guantes dielectricos, lentes, zapatos de seguridad y arnes', 'Seguridad'],
-      [ 8, 'Notebook con software de puesta en marcha y respaldo de configuraciones', 'Instrumentos'],
-      [ 9, 'Equipo de reemplazo ONT/router y repuestos menores', 'Repuestos'],
-      [10, 'Extension electrica, conos y senaletica', 'Seguridad'],
-      [11, 'Botiquin, agua y linterna frontal', 'Seguridad'],
-      [12, 'Documentos del vehiculo: permiso de circulacion, revision tecnica, seguro y TAG', 'Vehiculo'],
-      [13, 'Tarjeta corporativa de combustible', 'Vehiculo'],
-      [14, 'Guia de despacho y acta de conformidad del cliente', 'Documentos'],
-      [15, 'Celular con datos para reportar avance', 'Documentos'],
-      [16, 'Material de capacitacion del cliente', 'Documentos']
+      [ 1, 'Multimetro y pinza amperimetrica calibrados', 'BOLSO'],
+      [ 2, 'Crimpeadora, conectores RJ45 y tester de red', 'BOLSO'],
+      [ 3, 'Kit de fibra optica: fusionadora, pigtails y alcohol isopropilico', 'BOLSO'],
+      [ 4, 'Taladro percutor, brocas y tarugos', 'BOLSO'],
+      [ 5, 'Set de destornilladores aislados y llaves ajustables', 'BOLSO'],
+      [ 6, 'Amarras, cinta aisladora y canaletas', 'BOLSO'],
+      [ 7, 'Equipo de reemplazo ONT/router y repuestos menores', 'BOLSO'],
+      [ 8, 'Notebook con software de puesta en marcha y respaldo de configuraciones', 'BOLSO'],
+      [ 9, 'Escalera telescopica', 'VEHICULO'],
+      [10, 'Extension electrica, conos y senaletica', 'VEHICULO'],
+      [11, 'Documentos del vehiculo: permiso de circulacion, revision tecnica, seguro y TAG', 'VEHICULO'],
+      [12, 'Tarjeta corporativa de combustible', 'VEHICULO'],
+      [13, 'EPP: casco, guantes dielectricos, lentes, zapatos de seguridad y arnes', 'PERSONAL'],
+      [14, 'Botiquin, agua y linterna frontal', 'PERSONAL'],
+      [15, 'Celular con datos para reportar avance', 'PERSONAL'],
+      [16, 'Guia de despacho y acta de conformidad del cliente', 'PERSONAL'],
+      [17, 'Material de capacitacion enviado al cliente ANTES de llegar', 'PERSONAL']
     ]
   }
 };

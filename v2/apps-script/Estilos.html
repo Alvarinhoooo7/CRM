@@ -323,3 +323,102 @@ input:disabled,select:disabled { background:#eef1ef; color:#52646b; }
 .orden-agendada { border-left: 4px solid var(--ok) !important; }
 
 </style>
+<style>
+/* ==========================================================================
+   CAPA EXPLICATIVA · para que cualquiera entienda la pantalla que abrio
+   ========================================================================== */
+
+.ayuda-vista {
+  border-left: 4px solid var(--primario);
+  background: linear-gradient(180deg, #FBFCFE 0%, #FFFFFF 100%);
+}
+.ayuda-cabecera {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px;
+}
+.ayuda-cabecera h2 { margin: 0; }
+.ayuda-quees {
+  font-size: 15px; line-height: 1.6; color: var(--texto);
+  margin: 0 0 16px; font-weight: 500;
+}
+.ayuda-columnas {
+  display: grid; gap: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+}
+.ayuda-columnas h3 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--tenue); margin: 0 0 8px;
+}
+.ayuda-columnas ul { margin: 0; padding-left: 18px; }
+.ayuda-columnas li { margin-bottom: 7px; line-height: 1.6; font-size: 13px; }
+.ayuda-columnas p { margin: 0; line-height: 1.6; font-size: 13px; }
+.ayuda-ojo {
+  margin-top: 12px; padding: 10px 12px; border-radius: 6px;
+  background: #FDF3E3; border-left: 3px solid var(--tolerancia);
+  font-size: 13px; line-height: 1.6; color: #6B4A0F;
+}
+
+/* --- Manual de la pestaña Guía ------------------------------------------ */
+.bloque-explica {
+  padding: 15px 0; border-bottom: 1px solid #EEF0F3;
+}
+.bloque-explica:last-child { border-bottom: 0; }
+.bloque-explica h3 {
+  margin: 0 0 8px; font-size: 14px; color: var(--primario);
+}
+.bloque-explica p { margin: 8px 0 0; line-height: 1.65; font-size: 13px; }
+.formula {
+  display: inline-block; background: #F0F2F5; border: 1px solid var(--borde);
+  border-radius: 5px; padding: 6px 11px; font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12.5px; color: var(--primario);
+}
+.ejemplos {
+  margin: 11px 0 0; padding-left: 18px;
+}
+.ejemplos li {
+  margin-bottom: 5px; line-height: 1.6; font-size: 13px; color: #3A4150;
+}
+table.datos code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px; background: #F0F2F5; padding: 2px 5px; border-radius: 3px;
+}
+
+/* --- Glosario ------------------------------------------------------------ */
+.termino {
+  padding: 11px 0; border-bottom: 1px solid #EEF0F3;
+}
+.termino:last-child { border-bottom: 0; }
+.termino b { color: var(--primario); font-size: 13.5px; }
+.termino p { margin: 4px 0 0; line-height: 1.65; font-size: 13px; color: #3A4150; }
+
+/* --- Desglose de tiempo y costo por modo -------------------------------- */
+.desglose {
+  margin-top: 10px; border-top: 1px dashed var(--borde); padding-top: 10px;
+}
+.desglose-fila {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 4px 0; font-size: 12.5px; align-items: baseline;
+}
+.desglose-fila .concepto { flex: 1; }
+.desglose-fila .valor {
+  font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap;
+}
+.desglose-fila .detalle {
+  display: block; font-size: 11px; color: var(--tenue); line-height: 1.45;
+}
+.desglose-total {
+  display: flex; justify-content: space-between; padding-top: 8px; margin-top: 6px;
+  border-top: 1px solid var(--borde); font-weight: 700; font-size: 13px;
+}
+.tarjeta-modo {
+  background: #fff; border: 1px solid var(--borde); border-radius: 8px;
+  padding: 15px 17px; box-shadow: var(--sombra);
+}
+.tarjeta-modo.ganadora { border-color: var(--ok); border-width: 2px; }
+.tarjeta-modo.no-aplica { opacity: .6; }
+.tarjeta-modo h3 {
+  margin: 0 0 3px; font-size: 15px; color: var(--primario);
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+}
+.tarjeta-modo .monto-modo { font-size: 20px; font-weight: 700; color: var(--acento); }
+</style>

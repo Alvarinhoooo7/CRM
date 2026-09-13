@@ -284,14 +284,29 @@ function costearTramo_(f, viaje, nTecnicos, ctx) {
         ' no tiene tarifa cargada en la tabla TARIFAS DE BUS Y AVION de CONFIG.'));
     }
     c.pasajes = Math.round(tarifa * nTecnicos);
-    c.flete = Math.round(p.P_FLETE_HERRAMIENTAS);
-    c.traslados = Math.round(p.P_TRASLADO_AEROPUERTO);
+
+    if (modo === 'Avion') {
+      // El bolso de herramientas NO puede ir en cabina: taladros y alicates
+      // estan prohibidos por seguridad aerea. Hay que facturar equipaje, y se
+      // cobra POR PERSONA y POR TRAMO. Es el costo que mas se olvida al
+      // comparar un vuelo contra la camioneta.
+      c.flete = Math.round(p.P_EQUIPAJE_BODEGA_AVION * nTecnicos);
+      // Dos traslados por tramo: base al aeropuerto y aeropuerto de destino
+      // a la ciudad.
+      c.traslados = Math.round(p.P_TRASLADO_AEROPUERTO * 2);
+    } else {
+      // En bus el bolso viaja en la bodega del vehiculo, normalmente gratis.
+      c.flete = Math.round(p.P_FLETE_HERRAMIENTAS);
+      c.traslados = Math.round(p.P_TRASLADO_AEROPUERTO);
+    }
+
     c.arriendo = Math.round(p.P_ARRIENDO);
 
     if (!p.P_HERRAMIENTAS_TRANSPORTABLES) {
       ctx.alertas.push(alerta_('HERRAMIENTAS_SIN_VEHICULO', 'error',
-        'PLAN fila ' + f.fila + ': el tramo va en ' + modo + ' con las herramientas ' +
-        'amarradas a la camioneta. La cuadrilla llegaria sin herramientas.'));
+        'PLAN fila ' + f.fila + ': el tramo va en ' + modo + ' pero la configuracion dice ' +
+        'que las herramientas no pueden separarse de la camioneta. La cuadrilla llegaria ' +
+        'sin con que trabajar.'));
     }
 
   } else if (modo === 'Transporte publico') {
@@ -1001,7 +1016,7 @@ function compararModos_(destino, nTecnicos, ctx) {
   var sitio = horasEnSitio_(d.equipos || 0, nTecnicos, true, p);
   var topeDia = p.P_JORNADA_DIA_MAX + (p.P_PERMITE_HORAS_EXTRA ? p.P_HORAS_EXTRA_MAX_DIA : 0);
 
-  var evaluar = function (nombre, horasIdaModo, costoTransporte, aplicable, nota) {
+  var evaluar = function (nombre, horasIdaModo, costoTransporte, aplicable, nota, desglose) {
     var dias = Math.max(1, Math.ceil((2 * horasIdaModo + sitio.total) / topeDia));
     var noches = dias - 1;
     var personas = p.P_HABITACION_INDIVIDUAL ? nTecnicos : Math.ceil(nTecnicos / 2);
@@ -1013,6 +1028,10 @@ function compararModos_(destino, nTecnicos, ctx) {
       nota: nota || '',
       dias: dias, noches: noches,
       horasIda: redondear_(horasIdaModo, 2),
+      // Desglose en lenguaje comun, para que cualquiera entienda de donde sale
+      // el numero sin tener que leer el codigo.
+      desgloseTiempo: desglose || [],
+      desgloseCosto: [],
       transporte: Math.round(costoTransporte),
       hotel: Math.round(hotel),
       viatico: Math.round(viatico),
@@ -1022,32 +1041,120 @@ function compararModos_(destino, nTecnicos, ctx) {
 
   var opciones = [];
 
-  opciones.push(evaluar('Camioneta', horasIda,
+  // --- CAMIONETA ---------------------------------------------------------
+  // El tiempo es el de Maps puerta a puerta: la camioneta sale de la base y
+  // llega a la direccion del cliente. No hay tiempos muertos que sumar.
+  var opcCamioneta = evaluar('Camioneta', horasIda,
     (2 * km / p.P_RENDIMIENTO) * p.P_DIESEL + 2 * peaje + 2 * km * p.P_COSTO_KM,
     km > 0 && horasIda > 0,
-    km > 0 && horasIda > 0 ? 'Verificar disponibilidad de vehículo y conductor en el plan.' : 'Sin distancia y tiempo válidos. Actualice Maps.'));
+    km > 0 && horasIda > 0
+      ? 'Verificar disponibilidad de vehiculo y conductor en el plan.'
+      : 'Sin distancia y tiempo validos. Actualice Maps.',
+    [{ concepto: 'Manejar de la base al cliente', horas: redondear_(horasIda, 2),
+       detalle: 'Google Maps, puerta a puerta, ' + redondear_(km, 1) + ' km' }]);
 
+  opcCamioneta.desgloseCosto = [
+    { concepto: 'Combustible ida y vuelta',
+      monto: Math.round((2 * km / p.P_RENDIMIENTO) * p.P_DIESEL),
+      detalle: redondear_(2 * km / p.P_RENDIMIENTO, 1) + ' litros a ' +
+               formatearPesos_(p.P_DIESEL) + ' el litro' },
+    { concepto: 'Peajes ida y vuelta', monto: Math.round(2 * peaje),
+      detalle: 'Suma de las plazas del trayecto, en los dos sentidos' },
+    { concepto: 'Desgaste del vehiculo', monto: Math.round(2 * km * p.P_COSTO_KM),
+      detalle: redondear_(2 * km, 1) + ' km a ' + formatearPesos_(p.P_COSTO_KM) + ' por km' }
+  ];
+  opciones.push(opcCamioneta);
+
+  // --- BUS ---------------------------------------------------------------
   if (p.P_PERMITE_BUS) {
     var tb = d.pasajeBus || 0;
-    opciones.push(evaluar('Bus', d.horasBus || 0,
-      2 * tb * nTecnicos + 2 * p.P_FLETE_HERRAMIENTAS +
-      2 * p.P_TRASLADO_AEROPUERTO + p.P_ARRIENDO,
+    // El bus deja en el terminal, no en la puerta del cliente: hay que sumar
+    // el traslado desde el terminal hasta el sitio.
+    var horasBus = (d.horasBus || 0) + p.P_TIEMPO_A_AEROPUERTO_H;
+
+    var costoBus = 2 * tb * nTecnicos + 2 * p.P_FLETE_HERRAMIENTAS +
+                   2 * p.P_TRASLADO_AEROPUERTO + p.P_ARRIENDO;
+
+    var opcBus = evaluar('Bus', tb > 0 ? horasBus : 0, costoBus,
       tb > 0 && p.P_HERRAMIENTAS_TRANSPORTABLES,
-      tb > 0 ? (p.P_HERRAMIENTAS_TRANSPORTABLES ? '' :
-        'No ejecutable: las herramientas van en la camioneta')
-             : 'Sin tarifa de bus cargada para esta localidad'));
+      tb > 0 ? (p.P_HERRAMIENTAS_TRANSPORTABLES ? ''
+        : 'No ejecutable: la configuracion dice que las herramientas no se separan de la camioneta')
+             : 'Sin tarifa de bus cargada para esta localidad',
+      [{ concepto: 'Llegar al terminal y esperar',
+         horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
+         detalle: 'De la base al terminal de buses' },
+       { concepto: 'Viaje en bus', horas: redondear_(d.horasBus || 0, 2),
+         detalle: 'Tiempo del recorrido segun la empresa' }]);
+
+    opcBus.desgloseCosto = [
+      { concepto: 'Pasajes ida y vuelta', monto: Math.round(2 * tb * nTecnicos),
+        detalle: nTecnicos + ' tecnicos x 2 tramos x ' + formatearPesos_(tb) },
+      { concepto: 'Bolsos de herramientas', monto: Math.round(2 * p.P_FLETE_HERRAMIENTAS),
+        detalle: 'En bus el bolso va gratis en la bodega del vehiculo' },
+      { concepto: 'Traslados terminal a ciudad', monto: Math.round(2 * p.P_TRASLADO_AEROPUERTO),
+        detalle: 'Ida y vuelta, por cuadrilla' },
+      { concepto: 'Arriendo de vehiculo en destino', monto: Math.round(p.P_ARRIENDO),
+        detalle: 'Sin camioneta hay que moverse en el destino' }
+    ];
+    opciones.push(opcBus);
   }
 
+  // --- AVION -------------------------------------------------------------
   if (p.P_PERMITE_AVION) {
     var ta = d.pasajeAvion || 0;
-    var hv = (d.horasAvion || 0) + p.P_CHECKIN_AEROPUERTO_H;
-    opciones.push(evaluar('Avion', ta > 0 ? hv : 0,
-      2 * ta * nTecnicos + 2 * p.P_FLETE_HERRAMIENTAS +
-      2 * p.P_TRASLADO_AEROPUERTO + p.P_ARRIENDO,
+
+    // EL TIEMPO REAL DE UN VUELO NO ES EL TIEMPO DE VUELO.
+    // Puerta a puerta hay que sumar: ir al aeropuerto, check-in con equipaje
+    // facturado, volar, retirar los bolsos de la cinta y llegar del aeropuerto
+    // de destino a la ciudad. Un vuelo de 1,2 h se convierte en mas de 5 h.
+    var horasAvionReales =
+        p.P_TIEMPO_A_AEROPUERTO_H +
+        p.P_CHECKIN_AEROPUERTO_H +
+        (d.horasAvion || 0) +
+        p.P_RETIRO_EQUIPAJE_H +
+        p.P_TIEMPO_A_AEROPUERTO_H;
+
+    // EL COSTO REAL TAMPOCO ES LA TARIFA QUE SE VE EN INTERNET.
+    // Las herramientas no pueden ir en cabina, asi que cada tecnico debe
+    // facturar equipaje en cada tramo: n x 2 cobros que la tarifa no incluye.
+    var costoPasajes = 2 * ta * nTecnicos;
+    var costoEquipaje = 2 * p.P_EQUIPAJE_BODEGA_AVION * nTecnicos;
+    var costoTraslados = 4 * p.P_TRASLADO_AEROPUERTO;
+    var costoAvion = costoPasajes + costoEquipaje + costoTraslados + p.P_ARRIENDO;
+
+    var opcAvion = evaluar('Avion', ta > 0 ? horasAvionReales : 0, costoAvion,
       ta > 0 && p.P_HERRAMIENTAS_TRANSPORTABLES,
-      ta > 0 ? (p.P_HERRAMIENTAS_TRANSPORTABLES ? '' :
-        'No ejecutable: las herramientas van en la camioneta')
-             : 'Sin vuelo disponible a esta localidad'));
+      ta > 0 ? (p.P_HERRAMIENTAS_TRANSPORTABLES ? ''
+        : 'No ejecutable: la configuracion dice que las herramientas no se separan de la camioneta')
+             : 'Sin vuelo disponible a esta localidad',
+      [{ concepto: 'De la base al aeropuerto',
+         horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
+         detalle: 'Macul a Pudahuel' },
+       { concepto: 'Check-in y embarque', horas: redondear_(p.P_CHECKIN_AEROPUERTO_H, 2),
+         detalle: 'Con equipaje que facturar hay que llegar con mas tiempo' },
+       { concepto: 'Vuelo', horas: redondear_(d.horasAvion || 0, 2),
+         detalle: 'Tiempo en el aire' },
+       { concepto: 'Desembarque y retiro de bolsos',
+         horas: redondear_(p.P_RETIRO_EQUIPAJE_H, 2),
+         detalle: 'Esperar los bolsos en la cinta' },
+       { concepto: 'Del aeropuerto de destino a la ciudad',
+         horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
+         detalle: 'Los aeropuertos regionales quedan fuera de la ciudad' }]);
+
+    opcAvion.desgloseCosto = [
+      { concepto: 'Pasajes ida y vuelta', monto: Math.round(costoPasajes),
+        detalle: nTecnicos + ' tecnicos x 2 tramos x ' + formatearPesos_(ta) },
+      { concepto: 'Equipaje de bodega para las herramientas',
+        monto: Math.round(costoEquipaje),
+        detalle: nTecnicos + ' bolsos x 2 tramos x ' +
+                 formatearPesos_(p.P_EQUIPAJE_BODEGA_AVION) +
+                 '. Las herramientas no pueden ir en cabina' },
+      { concepto: 'Traslados a los aeropuertos', monto: Math.round(costoTraslados),
+        detalle: '4 trayectos: base-aeropuerto y aeropuerto-ciudad, ida y vuelta' },
+      { concepto: 'Arriendo de vehiculo en destino', monto: Math.round(p.P_ARRIENDO),
+        detalle: 'Sin camioneta hay que moverse en el destino' }
+    ];
+    opciones.push(opcAvion);
   }
 
   var ejecutables = opciones.filter(function (o) { return o.aplicable; });

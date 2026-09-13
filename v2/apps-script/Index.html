@@ -113,6 +113,7 @@
     </div>
 
     <div class="vista" id="vista-guia">
+      <div id="manualCompleto"></div>
       <div class="intro-vista"><div><div class="sobretitulo">PRESENTACIÓN · 4 INTEGRANTES</div><h2>Entender el plan. Explicar las decisiones.</h2><p>Un recorrido de 15 minutos por el problema, los cálculos y la experiencia del técnico.</p></div></div>
       <div class="rejilla rejilla-2">
         <div class="tarjeta"><h2>01 · Caso y alcance ℹ️</h2><p>10 técnicos y 6 Peugeot Partner para 33 equipos en 16 localidades. El escenario literal considera 2 horas de instalación y 30 minutos de capacitación por equipo. Las cuadrillas de tres son una decisión del equipo.</p><button class="btn btn-secundario" onclick="mostrar('resumen')">Mostrar resumen</button></div>
@@ -321,6 +322,8 @@
           Viaje completo de ida y vuelta para la dotacion asignada. Bus y avión son alternativas referenciales. El comparador no modifica el plan; hay que cotizar horarios, conexiones y traslado de herramientas.
         </p>
         <div class="tabla-envoltorio"><table class="datos" id="tablaModos"></table></div>
+        <div class="fila-form" style="margin-top:18px"><div class="campo"><label for="selectorDetalleModo">Ver el detalle completo de un destino</label><select id="selectorDetalleModo" onchange="dibujarDetalleModo()"></select></div></div>
+        <div id="detalleModo"></div>
       </div>
 
       <div class="tarjeta">
@@ -371,6 +374,7 @@
 </div>
 
 <script src="https://www.gstatic.com/charts/loader.js"></script>
+<?!= incluir_('Ayuda') ?>
 <?!= incluir_('Scripts') ?>
 <?!= incluir_('Editor') ?>
 <?!= incluir_('Agenda') ?>

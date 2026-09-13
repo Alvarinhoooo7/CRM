@@ -604,6 +604,90 @@ clasp push
 
 `clasp push` solo actualiza el código: no ejecuta funciones ni modifica las hojas.
 
+Si es la primera vez en este computador:
+
+```bash
+npm install -g @google/clasp
+clasp login                 # abre el navegador, se inicia sesión con la cuenta de la Sheet
+clasp status                # debe listar los 19 archivos de v2/apps-script
+clasp push
+```
+
+`clasp login` guarda la sesión en `~/.clasprc.json`. Ese archivo **no se versiona** y no debe
+compartirse: contiene el token de acceso a la cuenta de Google.
+
+---
+
+# PARTE 7B · LA APLICACIÓN DEL TÉCNICO (APPSHEET)
+
+Es la entrega del **estudio de caso 2**: la plataforma donde cada técnico verifica su ruta,
+sus implementos, el hotel y la camioneta. Corre sobre el mismo Google Sheets.
+
+El armado completo, tabla por tabla y fórmula por fórmula, está en
+**[`appsheet/README.md`](appsheet/README.md)**. Acá va solo cómo dejarla andando en el celular.
+
+## 7B.1 Generar los datos
+
+```bash
+node appsheet/generar.cjs
+```
+
+Escribe siete CSV en `appsheet/csv/`. Imprime además la cuadratura contra el PDF (33 equipos,
+16 localidades), el itinerario de las cinco cuadrillas y el desglose del dinero. **Si algún
+número de la presentación no calza, este comando es la fuente de verdad.**
+
+## 7B.2 Cargar el Sheet y crear la app
+
+1. Drive → nueva hoja de cálculo `Servicio Tecnico en Ruta · App`
+2. Por cada CSV: **Archivo → Importar → Subir → Insertar hojas nuevas**. La pestaña debe
+   quedar con el mismo nombre del archivo
+3. En `TECNICOS` y en `ORDENES`, reemplazar los correos `t01@servicioenruta.cl` por los
+   **Gmail reales** de los integrantes. Sin esto el filtro por usuario no se puede demostrar
+4. [appsheet.com](https://www.appsheet.com) → **Create → App → Start with existing data** →
+   elegir la hoja
+5. Seguir `appsheet/README.md` desde la sección 3: tipos de columna, fórmulas, filtro de
+   seguridad y vistas
+
+## 7B.3 Instalarla en el celular
+
+**Opción A · aplicación nativa (la que conviene para la presentación)**
+
+1. Instalar **AppSheet** desde Google Play o App Store
+2. Abrirla e iniciar sesión **con la misma cuenta de Google** que creó la app
+3. La app aparece en la lista. Se abre y queda disponible sin volver a buscarla
+
+**Opción B · sin instalar nada**
+
+En AppSheet, **Share → Copy app link**. Se abre ese enlace en el navegador del celular y se
+usa *Añadir a pantalla de inicio*. Queda con ícono propio y pantalla completa, como una app.
+
+> Útil si un compañero no alcanza a instalar nada antes de presentar, o si el teléfono no
+> tiene espacio.
+
+## 7B.4 Que la usen los compañeros
+
+En el editor: **Users → Add users**, se agregan los Gmail de los integrantes y se les envía la
+invitación. Cada uno entra y, por el filtro de seguridad, ve **solo sus órdenes**.
+
+> **Ojo con la licencia.** El plan gratuito permite construir y usar la app con la cuenta que
+> la creó. Compartirla con otros usuarios normalmente requiere plan pago, salvo que la cuenta
+> tenga Workspace con AppSheet Core. **Verificarlo el día anterior, no el mismo día.**
+>
+> Si no da la licencia: **la demostración se hace desde el teléfono del creador** y cumple
+> igual. Para mostrar el filtro por usuario basta con cerrar sesión y entrar con otra cuenta.
+
+## 7B.5 Antes de presentar
+
+| Revisar | Cómo |
+|---|---|
+| La app abre en el celular | Sin wifi de la sala: probar con datos móviles |
+| El filtro funciona | Entrar con dos cuentas distintas y comparar lo que ve cada una |
+| Las capturas están en la PPT | Los siete marcos punteados de `presentacion/` |
+| El respaldo | Exportar una orden a PDF por si falla la conexión |
+
+Si el proyector o la red fallan, se presenta con las capturas de la PPT y la planilla abierta.
+**Nunca depender de que haya internet en la sala.**
+
 ---
 
 # PARTE 8 · ESTRUCTURA DEL REPOSITORIO
@@ -614,6 +698,13 @@ CRM/
 ├── Estudio de caso 1.pdf
 ├── GUIA_TARIFAS_CAMIONETAS_2026.md
 ├── apps-script/           ← versión 1, histórica
+├── appsheet/              ← CASO 2: la app del técnico
+│   ├── README.md              Armado paso a paso en AppSheet
+│   ├── generar.cjs            Planifica y escribe los CSV
+│   └── csv/                   Las 7 tablas que se importan al Sheet
+├── presentacion/
+│   ├── generar_ppt.py         Genera la presentación
+│   └── Presentacion_Casos_1_y_2.pptx   21 láminas, guion de 13:55
 └── v2/
     ├── README.md          ← documentación técnica detallada
     └── apps-script/

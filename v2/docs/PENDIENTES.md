@@ -4,7 +4,7 @@ La guía vigente es el [README principal](../../README.md). Las instrucciones de
 
 | Tarea | Criterio de cierre |
 | --- | --- |
-| Subir v2 con clasp | Subida correcta; aparecen `08_Editor.gs` y `Editor.html` |
+| ~~Subir v2 con clasp~~ | **HECHO 13-09-2026 10:39** · `clasp push` subió los 19 archivos, incluidos `08_Editor.gs` y `Editor.html` |
 | Actualizar la implementación | La URL `/exec` muestra v2.1.0 y diez pantallas |
 | Validar credenciales y permisos | Login válido, rechazo de clave incorrecta y permiso Drive |
 | Calcular ambos escenarios | 33 equipos; 33 sesiones literal y 16 en mejora; revisar jornadas |

@@ -615,14 +615,19 @@ function construirPLAN_(libro, hoja) {
         .setHelpText(col.titulo + ': elija de la lista.').build());
 
     } else if (col.rangoLista) {
-      var rangoFuente = libro.getRangeByName(col.rangoLista);
-      if (rangoFuente) {
-        // Para la nomina se valida contra la primera columna, que es el codigo.
-        if (col.rangoLista === 'T_TECNICOS') {
-          rangoFuente = rangoFuente.offset(0, 0, rangoFuente.getNumRows(), 1);
-        }
+      if (col.rangoLista === 'T_TECNICOS') {
         rango.setDataValidation(SpreadsheetApp.newDataValidation()
-          .requireValueInRange(rangoFuente, true).setAllowInvalid(false).build());
+          .requireValueInList(codigos, true).setAllowInvalid(false).build());
+      } else {
+        try {
+          var rangoFuente = libro.getRangeByName(col.rangoLista);
+          if (rangoFuente) {
+            rango.setDataValidation(SpreadsheetApp.newDataValidation()
+              .requireValueInRange(rangoFuente, true).setAllowInvalid(false).build());
+          }
+        } catch (eRangoLista) {
+          // Continua sin validacion si el rango aun no esta disponible
+        }
       }
     } else if (col.validacion && typeof col.validacion.min === 'number') {
       rango.setDataValidation(SpreadsheetApp.newDataValidation()
@@ -688,10 +693,26 @@ function construirListasDerivadas_() {
   return salida;
 }
 
-/** Define o redefine un named range. */
+/** Define o redefine un named range de forma robusta. */
 function definirRango_(libro, nombre, rango) {
-  try { libro.removeNamedRange(nombre); } catch (e) { /* no existia */ }
-  libro.setNamedRange(nombre, rango);
+  try {
+    var existentes = libro.getNamedRanges();
+    for (var i = 0; i < existentes.length; i++) {
+      if (existentes[i].getName() === nombre) {
+        existentes[i].setRange(rango);
+        return;
+      }
+    }
+  } catch (e) {}
+
+  try {
+    libro.setNamedRange(nombre, rango);
+  } catch (err) {
+    try {
+      libro.removeNamedRange(nombre);
+      libro.setNamedRange(nombre, rango);
+    } catch (e2) {}
+  }
 }
 
 /** Quita todas las validaciones de una hoja antes de reconstruirla. */

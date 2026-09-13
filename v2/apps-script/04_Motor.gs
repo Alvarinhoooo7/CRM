@@ -535,6 +535,24 @@ function calcularTecnicoDias_(tramos, jornadas, ctx) {
     }
   }
 
+  // --- Viatico -----------------------------------------------------------
+  // NO se le paga viatico a todo el mundo todos los dias. Son dos condiciones
+  // y se cumplen las dos o no hay viatico:
+  //
+  //   1. El tecnico esta FUERA de la Region Metropolitana. Quien trabaja en
+  //      Maipu almuerza y duerme en su casa.
+  //   2. Es un viaje de MAS DE UN DIA. Ir a Talca y volver el mismo dia no
+  //      genera viatico: sale y llega a su casa.
+  //
+  // La segunda condicion se resuelve mirando si ese tecnico pernocta ese dia
+  // o si venia pernoctando del dia anterior, que es lo que hace que un dia
+  // sea parte de un viaje largo y no una salida de ida y vuelta.
+  var pernoctaPorTecnicoDia = {};
+  for (var clave3 in mapa) {
+    if (!Object.prototype.hasOwnProperty.call(mapa, clave3)) continue;
+    if (mapa[clave3].noches > 0) pernoctaPorTecnicoDia[clave3] = true;
+  }
+
   var salida = [];
   for (var clave2 in mapa) {
     if (!Object.prototype.hasOwnProperty.call(mapa, clave2)) continue;
@@ -543,7 +561,21 @@ function calcularTecnicoDias_(tramos, jornadas, ctx) {
     x.horasViaje = redondear_(x.horasViaje, 2);
     x.horasEnSitio = redondear_(x.horasEnSitio, 2);
     x.nLocalidades = Object.keys(x.localidades).length;
-    x.viatico = p.P_VIATICO;   // siempre el mismo monto, incluye colacion
+
+    var numeroDia = Number(String(x.dia).replace(/\D/g, '')) || 0;
+    var durmioAnoche = !!pernoctaPorTecnicoDia[x.tecnico + '|D' + (numeroDia - 1)];
+    var duermeHoy = x.noches > 0;
+    x.viajeLargo = duermeHoy || durmioAnoche;
+
+    var cumpleRegion = !p.P_VIATICO_SOLO_FUERA_RM || x.fueraRM;
+    var cumpleDuracion = !p.P_VIATICO_SOLO_CON_PERNOCTACION || x.viajeLargo;
+
+    x.viatico = (cumpleRegion && cumpleDuracion) ? p.P_VIATICO : 0;
+    x.motivoViatico = x.viatico
+      ? 'Fuera de la RM y en viaje de mas de un dia'
+      : (!cumpleRegion ? 'Dentro de la Region Metropolitana: duerme en su casa'
+                       : 'Sale y vuelve el mismo dia: no corresponde viatico');
+
     salida.push(x);
   }
   return salida;
@@ -1042,6 +1074,41 @@ function alerta_(id, nivel, mensaje) {
 }
 
 /**
+ * Dotaciones que vale la pena evaluar para instalar N equipos.
+ *
+ * Mandar mas gente solo sirve si reduce el numero de vueltas. Para 5 equipos,
+ * pasar de 3 a 4 tecnicos no cambia nada: techo(5/3) y techo(5/4) son ambos 2
+ * vueltas, o sea 4 horas. La cuarta persona viaja, come y duerme gratis para
+ * la empresa sin ahorrar un minuto.
+ *
+ * Peor todavia con 1 equipo: uno o tres tecnicos tardan exactamente 2 horas,
+ * pero tres triplican el hotel, el viatico y los pasajes.
+ *
+ * Esta funcion devuelve solo las dotaciones que de verdad cambian el tiempo,
+ * para que el comparador evalue alternativas reales y no desperdicio.
+ *
+ * @param {number} equipos  equipos a instalar en el sitio
+ * @return {Array<number>} dotaciones utiles, de menor a mayor
+ */
+function dotacionesUtiles_(equipos) {
+  if (equipos <= 0) return [1];
+
+  var utiles = [];
+  var vueltasPrevias = null;
+
+  for (var n = 1; n <= equipos; n++) {
+    var vueltas = Math.ceil(equipos / n);
+    // Solo se agrega si esta persona adicional reduce las vueltas.
+    if (vueltasPrevias === null || vueltas < vueltasPrevias) {
+      utiles.push(n);
+      vueltasPrevias = vueltas;
+    }
+    if (vueltas === 1) break;   // ya no se puede ir mas rapido
+  }
+  return utiles;
+}
+
+/**
  * Busca la forma MAS BARATA de repartir un viaje completo en dias.
  *
  * Esta es la funcion que hace que el sistema elija de verdad la opcion mas
@@ -1221,201 +1288,246 @@ function redondear_(numero, decimales) {
  * asignada, y dice cual sale mas barato. Alimenta la pestana Transporte.
  * ========================================================================== */
 
-function compararModos_(destino, nTecnicos, ctx) {
+/**
+ * Compara TODAS las formas razonables de atender una localidad y devuelve la
+ * mas barata de cada modo de transporte.
+ *
+ * Antes esta funcion asumia una cuadrilla fija de tres personas y por eso
+ * entregaba disparates: mandaba tres tecnicos a Tome a instalar UN equipo,
+ * pagaba tres hoteles y seis viaticos, y daba $475.060 por un trabajo de dos
+ * horas. Con un tecnico en bus el mismo trabajo cuesta menos de la mitad y se
+ * demora exactamente lo mismo, porque un equipo lo instala una persona.
+ *
+ * Ahora, para cada modo, se prueban las dotaciones que de verdad cambian el
+ * tiempo (ver dotacionesUtiles_) y se elige la combinacion mas barata de
+ * cuanta gente mandar y en que mandarla.
+ */
+function compararModos_(destino, nTecnicosSugerido, ctx) {
   var p = ctx.p;
   var d = ctx.destinos[destino];
   if (!d || destino === 'BASE') return null;
+
+  var equipos = d.equipos || 0;
+  var enRM = String(d.enRM || '').toLowerCase().indexOf('s') === 0;
 
   var ruta = obtenerRuta_(ctx.rutas, 'BASE', destino, false);
   var km = ruta ? ruta.km : (d.km || 0);
   var horasIda = ruta ? ruta.horas : (d.horas || 0);
   var peaje = calcularPeajeTramo_('BASE', destino, p, ctx.ajustesPeaje).total;
 
-  var sitio = horasEnSitio_(d.equipos || 0, nTecnicos, true, p);
-  var topeDia = p.P_JORNADA_DIA_MAX + (p.P_PERMITE_HORAS_EXTRA ? p.P_HORAS_EXTRA_MAX_DIA : 0);
+  var dotaciones = dotacionesUtiles_(equipos);
 
-  var evaluar = function (nombre, horasIdaModo, costoTransporte, aplicable, nota,
-                          desglose, costoPorDia) {
-    // Se prueban todas las formas legales de repartir el viaje en dias y se
-    // toma la mas barata, costeando las horas extra contra el hotel. Un dia
-    // apretado con sobretiempo puede salir mucho mas barato que dormir afuera.
+  // Salir de la region con una sola persona deja al tecnico sin respaldo a
+  // cientos de kilometros. Si jefatura exige ir de a dos, se descartan las
+  // dotaciones menores aunque sean mas baratas.
+  var minimoFuera = enRM ? 1 : (p.P_MIN_TECNICOS_FUERA_RM || 1);
+  dotaciones = dotaciones.filter(function (n) { return n >= minimoFuera; });
+  if (!dotaciones.length) dotaciones = [minimoFuera];
+
+  /**
+   * Evalua un modo con una dotacion concreta y devuelve el costo del viaje
+   * completo, ya con la reparticion de dias mas barata.
+   */
+  var evaluar = function (modo, n, horasIdaModo, costoTransporte, costoPorDia,
+                          aplicable, nota, desgloseTiempo, desgloseCosto) {
+    var sitio = horasEnSitio_(equipos, n, true, p);
     var horasTotales = 2 * horasIdaModo + sitio.total;
-    var prog = mejorProgramacion_(horasTotales, nTecnicos, costoTransporte,
-                                  costoPorDia || 0, p);
+
+    var prog = mejorProgramacion_(horasTotales, n, costoTransporte, costoPorDia, p);
     var m = prog.mejor;
 
+    // REGLA DEL VIATICO: solo fuera de la RM y solo si el viaje dura mas de un
+    // dia. Ir y volver a Maipu no genera viatico, y tampoco ir y volver a
+    // Talca en el mismo dia: el tecnico llega a dormir a su casa.
+    var cumpleRegion = !p.P_VIATICO_SOLO_FUERA_RM || !enRM;
+    var cumpleDuracion = !p.P_VIATICO_SOLO_CON_PERNOCTACION || m.dias > 1;
+    var viatico = (cumpleRegion && cumpleDuracion) ? m.dias * n * p.P_VIATICO : 0;
+
+    var total = costoTransporte + m.costoPorDia + m.hotel + viatico + m.sobretiempo;
+
     return {
-      modo: nombre,
+      modo: modo,
+      dotacion: n,
       aplicable: aplicable,
       nota: nota || '',
       dias: m.dias,
       noches: m.noches,
       horasIda: redondear_(horasIdaModo, 2),
       horasTotales: redondear_(horasTotales, 2),
+      horasEnSitio: redondear_(sitio.total, 2),
       horasExtra: m.horasExtra,
       sobretiempo: m.sobretiempo,
       programacion: m.etiqueta,
-      alternativasDia: prog.alternativas,
-      ahorroProgramacion: m.ahorroFrenteASiguiente,
-      // Desglose en lenguaje comun, para que cualquiera entienda de donde sale
-      // el numero sin tener que leer el codigo.
-      desgloseTiempo: desglose || [],
-      desgloseCosto: [],
+      desgloseTiempo: desgloseTiempo || [],
+      desgloseCosto: desgloseCosto || [],
       transporte: Math.round(costoTransporte + m.costoPorDia),
       hotel: m.hotel,
-      viatico: m.viatico,
-      total: m.total
+      viatico: Math.round(viatico),
+      motivoViatico: viatico
+        ? 'Fuera de la RM y con pernoctacion'
+        : (!cumpleRegion ? 'Dentro de la RM: el tecnico duerme en su casa'
+                         : 'Ida y vuelta el mismo dia: no corresponde'),
+      total: Math.round(total)
     };
+  };
+
+  /** De todas las dotaciones probadas para un modo, se queda con la barata. */
+  var mejorDe = function (candidatas) {
+    var validas = candidatas.filter(function (c) { return c; });
+    if (!validas.length) return null;
+    validas.sort(function (a, b) { return a.total - b.total; });
+    var elegida = validas[0];
+    elegida.dotacionesEvaluadas = validas.map(function (c) {
+      return { dotacion: c.dotacion, total: c.total, dias: c.dias, noches: c.noches };
+    });
+    return elegida;
   };
 
   var opciones = [];
 
-  // --- CAMIONETA ---------------------------------------------------------
-  // El tiempo es el de Maps puerta a puerta: la camioneta sale de la base y
-  // llega a la direccion del cliente. No hay tiempos muertos que sumar.
-  var opcCamioneta = evaluar('Camioneta', horasIda,
-    (2 * km / p.P_RENDIMIENTO) * p.P_DIESEL + 2 * peaje + 2 * km * p.P_COSTO_KM,
-    km > 0 && horasIda > 0,
-    km > 0 && horasIda > 0
-      ? 'Verificar disponibilidad de vehiculo y conductor en el plan.'
-      : 'Sin distancia y tiempo validos. Actualice Maps.',
-    [{ concepto: 'Manejar de la base al cliente', horas: redondear_(horasIda, 2),
-       detalle: 'Google Maps, puerta a puerta, ' + redondear_(km, 1) + ' km' }]);
+  /* --- CAMIONETA ---------------------------------------------------------
+   * El vehiculo cuesta lo mismo vaya uno o tres, pero caben
+   * P_CAPACIDAD_CAMIONETA personas: mas gente son mas camionetas, y cada una
+   * gasta su propio combustible y paga su propio peaje.                   */
+  opciones.push(mejorDe(dotaciones.map(function (n) {
+    var vehiculos = Math.ceil(n / p.P_CAPACIDAD_CAMIONETA);
+    var combustible = vehiculos * (2 * km / p.P_RENDIMIENTO) * p.P_DIESEL;
+    var peajes = vehiculos * 2 * peaje;
+    var desgaste = vehiculos * 2 * km * p.P_COSTO_KM;
 
-  opcCamioneta.desgloseCosto = [
-    { concepto: 'Combustible ida y vuelta',
-      monto: Math.round((2 * km / p.P_RENDIMIENTO) * p.P_DIESEL),
-      detalle: redondear_(2 * km / p.P_RENDIMIENTO, 1) + ' litros a ' +
-               formatearPesos_(p.P_DIESEL) + ' el litro' },
-    { concepto: 'Peajes ida y vuelta', monto: Math.round(2 * peaje),
-      detalle: 'Suma de las plazas del trayecto, en los dos sentidos' },
-    { concepto: 'Desgaste del vehiculo', monto: Math.round(2 * km * p.P_COSTO_KM),
-      detalle: redondear_(2 * km, 1) + ' km a ' + formatearPesos_(p.P_COSTO_KM) + ' por km' }
-  ];
-  opciones.push(opcCamioneta);
+    return evaluar('Camioneta', n, horasIda, combustible + peajes + desgaste, 0,
+      km > 0 && horasIda > 0,
+      km > 0 && horasIda > 0 ? '' : 'Sin distancia valida. Actualice Maps.',
+      [{ concepto: 'Manejar de la base al cliente', horas: redondear_(horasIda, 2),
+         detalle: 'Puerta a puerta, ' + redondear_(km, 1) + ' km' }],
+      [{ concepto: 'Combustible ida y vuelta', monto: Math.round(combustible),
+         detalle: vehiculos + ' camioneta(s), ' +
+                  redondear_(vehiculos * 2 * km / p.P_RENDIMIENTO, 1) + ' litros' },
+       { concepto: 'Peajes ida y vuelta', monto: Math.round(peajes),
+         detalle: vehiculos + ' camioneta(s) por las plazas del trayecto' },
+       { concepto: 'Desgaste del vehiculo', monto: Math.round(desgaste),
+         detalle: redondear_(vehiculos * 2 * km, 1) + ' km a ' +
+                  formatearPesos_(p.P_COSTO_KM) + ' el km' }]);
+  })));
 
-  // --- BUS ---------------------------------------------------------------
-  if (p.P_PERMITE_BUS) {
-    var tb = d.pasajeBus || 0;
-    // El bus deja en el terminal, no en la puerta del cliente: hay que sumar
-    // el traslado desde el terminal hasta el sitio.
-    var horasBus = (d.horasBus || 0) + p.P_TIEMPO_A_AEROPUERTO_H;
+  /* --- TRANSPORTE PUBLICO ------------------------------------------------
+   * Dentro de Santiago la cuadrilla se mueve en metro o micro con la mochila
+   * de herramientas. No se estaba comparando, y en la RM suele ser la opcion
+   * mas barata con diferencia.                                            */
+  // El pasaje de la Red solo sirve en el Gran Santiago. Melipilla es RM pero
+  // esta a 62 km: ahi no llega la micro urbana.
+  var alcanceUrbano = km > 0 && km <= (p.P_KM_MAX_TRANSPORTE_PUBLICO || 40);
+  if (p.P_PERMITE_TRANSPORTE_PUBLICO && enRM && alcanceUrbano) {
+    opciones.push(mejorDe(dotaciones.map(function (n) {
+      var pasajes = 2 * n * p.P_TRANSPORTE_PUBLICO;
+      var factor = p.P_FACTOR_TRANSPORTE_PUBLICO || 2;
+      var horasPublico = horasIda * factor;
 
-    // El arriendo en destino se cobra por dia, asi que no va en el costo fijo:
-    // se le pasa al buscador de programacion para que lo multiplique por los
-    // dias que termine eligiendo.
-    var costoBus = 2 * tb * nTecnicos + 2 * p.P_FLETE_HERRAMIENTAS +
-                   2 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM;
-
-    var opcBus = evaluar('Bus', tb > 0 ? horasBus : 0, costoBus,
-      tb > 0 && p.P_HERRAMIENTAS_TRANSPORTABLES,
-      tb > 0 ? (p.P_HERRAMIENTAS_TRANSPORTABLES ? ''
-        : 'No ejecutable: la configuracion dice que las herramientas no se separan de la camioneta')
-             : 'Sin tarifa de bus cargada para esta localidad',
-      [{ concepto: 'Llegar al terminal y esperar',
-         horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
-         detalle: 'De la base al terminal de buses' },
-       { concepto: 'Viaje en bus', horas: redondear_(d.horasBus || 0, 2),
-         detalle: 'Tiempo del recorrido segun la empresa' }],
-      p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM);
-
-    opcBus.desgloseCosto = [
-      { concepto: 'Pasajes ida y vuelta', monto: Math.round(2 * tb * nTecnicos),
-        detalle: nTecnicos + ' tecnicos x 2 tramos x ' + formatearPesos_(tb) },
-      { concepto: 'Bolsos de herramientas', monto: Math.round(2 * p.P_FLETE_HERRAMIENTAS),
-        detalle: 'En bus el bolso va gratis en la bodega del vehiculo' },
-      { concepto: 'Taxi terminal a ciudad',
-        monto: Math.round(2 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM),
-        detalle: '2 carreras de ' + p.P_KM_TERMINAL_CIUDAD + ' km a ' +
-                 formatearPesos_(p.P_TAXI_POR_KM) + ' el km' },
-      { concepto: 'Taxi dentro de la ciudad de destino',
-        monto: Math.round(p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM * opcBus.dias),
-        detalle: opcBus.dias + ' dia(s) x ' + p.P_KM_TAXI_DIA + ' km a ' +
-                 formatearPesos_(p.P_TAXI_POR_KM) + ' el km. No se arrienda ' +
-                 'vehiculo: se toma taxi' }
-    ];
-    opciones.push(opcBus);
+      return evaluar('Transporte publico', n, horasPublico, pasajes, 0,
+        true,
+        'Dentro de la Region Metropolitana, con la mochila de herramientas al hombro.',
+        [{ concepto: 'Metro o micro hasta el cliente',
+           horas: redondear_(horasPublico, 2),
+           detalle: 'Aproximadamente ' + factor + ' veces lo que demora la camioneta' }],
+        [{ concepto: 'Pasajes ida y vuelta', monto: Math.round(pasajes),
+           detalle: n + ' tecnico(s) x 2 tramos x ' +
+                    formatearPesos_(p.P_TRANSPORTE_PUBLICO) },
+         { concepto: 'Combustible, peaje y desgaste', monto: 0,
+           detalle: 'No aplica: no se usa vehiculo de la empresa' }]);
+    })));
   }
 
-  // --- AVION -------------------------------------------------------------
-  if (p.P_PERMITE_AVION) {
-    var ta = d.pasajeAvion || 0;
+  /* --- BUS ---------------------------------------------------------------- */
+  if (p.P_PERMITE_BUS && (d.pasajeBus || 0) > 0) {
+    opciones.push(mejorDe(dotaciones.map(function (n) {
+      var tb = d.pasajeBus;
+      var horasBus = (d.horasBus || 0) + p.P_TIEMPO_A_AEROPUERTO_H;
+      var pasajes = 2 * tb * n;
+      var flete = 2 * p.P_FLETE_HERRAMIENTAS;
+      var taxi = 2 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM;
+      var taxiDia = p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM;
 
-    // EL TIEMPO REAL DE UN VUELO NO ES EL TIEMPO DE VUELO.
-    // Puerta a puerta hay que sumar: ir al aeropuerto, check-in con equipaje
-    // facturado, volar, retirar los bolsos de la cinta y llegar del aeropuerto
-    // de destino a la ciudad. Un vuelo de 1,2 h se convierte en mas de 5 h.
-    var horasAvionReales =
-        p.P_TIEMPO_A_AEROPUERTO_H +
-        p.P_CHECKIN_AEROPUERTO_H +
-        (d.horasAvion || 0) +
-        p.P_RETIRO_EQUIPAJE_H +
-        p.P_TIEMPO_A_AEROPUERTO_H;
-
-    // EL COSTO REAL TAMPOCO ES LA TARIFA QUE SE VE EN INTERNET.
-    // Las herramientas no pueden ir en cabina, asi que cada tecnico debe
-    // facturar equipaje en cada tramo: n x 2 cobros que la tarifa no incluye.
-    var costoPasajes = 2 * ta * nTecnicos;
-    var costoEquipaje = 2 * p.P_EQUIPAJE_BODEGA_AVION * nTecnicos;
-    var costoTraslados = 4 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM;
-    var costoAvion = costoPasajes + costoEquipaje + costoTraslados;
-
-    var opcAvion = evaluar('Avion', ta > 0 ? horasAvionReales : 0, costoAvion,
-      ta > 0 && p.P_HERRAMIENTAS_TRANSPORTABLES,
-      ta > 0 ? (p.P_HERRAMIENTAS_TRANSPORTABLES ? ''
-        : 'No ejecutable: la configuracion dice que las herramientas no se separan de la camioneta')
-             : 'Sin vuelo disponible a esta localidad',
-      [{ concepto: 'De la base al aeropuerto',
-         horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
-         detalle: 'Macul a Pudahuel' },
-       { concepto: 'Check-in y embarque', horas: redondear_(p.P_CHECKIN_AEROPUERTO_H, 2),
-         detalle: 'Con equipaje que facturar hay que llegar con mas tiempo' },
-       { concepto: 'Vuelo', horas: redondear_(d.horasAvion || 0, 2),
-         detalle: 'Tiempo en el aire' },
-       { concepto: 'Desembarque y retiro de bolsos',
-         horas: redondear_(p.P_RETIRO_EQUIPAJE_H, 2),
-         detalle: 'Esperar los bolsos en la cinta' },
-       { concepto: 'Del aeropuerto de destino a la ciudad',
-         horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
-         detalle: 'Los aeropuertos regionales quedan fuera de la ciudad' }],
-      p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM);
-
-    opcAvion.desgloseCosto = [
-      { concepto: 'Pasajes ida y vuelta', monto: Math.round(costoPasajes),
-        detalle: nTecnicos + ' tecnicos x 2 tramos x ' + formatearPesos_(ta) },
-      { concepto: 'Equipaje de bodega para las herramientas',
-        monto: Math.round(costoEquipaje),
-        detalle: nTecnicos + ' bolsos x 2 tramos x ' +
-                 formatearPesos_(p.P_EQUIPAJE_BODEGA_AVION) +
-                 '. Las herramientas no pueden ir en cabina' },
-      { concepto: 'Taxi a los aeropuertos', monto: Math.round(costoTraslados),
-        detalle: '4 carreras de ' + p.P_KM_TERMINAL_CIUDAD + ' km a ' +
-                 formatearPesos_(p.P_TAXI_POR_KM) + ' el km: base-aeropuerto y ' +
-                 'aeropuerto-ciudad, ida y vuelta' },
-      { concepto: 'Taxi dentro de la ciudad de destino',
-        monto: Math.round(p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM * opcAvion.dias),
-        detalle: opcAvion.dias + ' dia(s) x ' + p.P_KM_TAXI_DIA + ' km a ' +
-                 formatearPesos_(p.P_TAXI_POR_KM) + ' el km. No se arrienda ' +
-                 'vehiculo: se toma taxi' }
-    ];
-    opciones.push(opcAvion);
+      return evaluar('Bus', n, horasBus, pasajes + flete + taxi, taxiDia,
+        p.P_HERRAMIENTAS_TRANSPORTABLES,
+        p.P_HERRAMIENTAS_TRANSPORTABLES ? ''
+          : 'No ejecutable: la configuracion dice que las herramientas no se separan ' +
+            'de la camioneta',
+        [{ concepto: 'Llegar al terminal',
+           horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
+           detalle: 'De la base al terminal de buses' },
+         { concepto: 'Viaje en bus', horas: redondear_(d.horasBus || 0, 2),
+           detalle: 'Recorrido segun la empresa' }],
+        [{ concepto: 'Pasajes ida y vuelta', monto: Math.round(pasajes),
+           detalle: n + ' tecnico(s) x 2 tramos x ' + formatearPesos_(tb) },
+         { concepto: 'Mochilas de herramientas', monto: Math.round(flete),
+           detalle: 'En bus la mochila viaja gratis en la bodega del vehiculo' },
+         { concepto: 'Taxi del terminal a la ciudad', monto: Math.round(taxi),
+           detalle: '2 carreras de ' + p.P_KM_TERMINAL_CIUDAD + ' km' }]);
+    })));
   }
 
-  var ejecutables = opciones.filter(function (o) { return o.aplicable; });
-  ejecutables.sort(function (a, b) { return a.total - b.total; });
+  /* --- AVION --------------------------------------------------------------- */
+  if (p.P_PERMITE_AVION && (d.pasajeAvion || 0) > 0) {
+    opciones.push(mejorDe(dotaciones.map(function (n) {
+      var ta = d.pasajeAvion;
+      var horasAvion = p.P_TIEMPO_A_AEROPUERTO_H + p.P_CHECKIN_AEROPUERTO_H +
+                       (d.horasAvion || 0) + p.P_RETIRO_EQUIPAJE_H +
+                       p.P_TIEMPO_A_AEROPUERTO_H;
+      var pasajes = 2 * ta * n;
+      var equipaje = 2 * p.P_EQUIPAJE_BODEGA_AVION * n;
+      var taxi = 4 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM;
+      var taxiDia = p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM;
 
+      return evaluar('Avion', n, horasAvion, pasajes + equipaje + taxi, taxiDia,
+        p.P_HERRAMIENTAS_TRANSPORTABLES,
+        p.P_HERRAMIENTAS_TRANSPORTABLES ? ''
+          : 'No ejecutable: la configuracion dice que las herramientas no se separan ' +
+            'de la camioneta',
+        [{ concepto: 'De la base al aeropuerto',
+           horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2), detalle: 'Macul a Pudahuel' },
+         { concepto: 'Check-in y embarque',
+           horas: redondear_(p.P_CHECKIN_AEROPUERTO_H, 2),
+           detalle: 'Con equipaje que facturar hay que llegar antes' },
+         { concepto: 'Vuelo', horas: redondear_(d.horasAvion || 0, 2),
+           detalle: 'Tiempo en el aire' },
+         { concepto: 'Retiro de equipaje', horas: redondear_(p.P_RETIRO_EQUIPAJE_H, 2),
+           detalle: 'Esperar las mochilas en la cinta' },
+         { concepto: 'Del aeropuerto a la ciudad',
+           horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
+           detalle: 'Los aeropuertos regionales quedan fuera de la ciudad' }],
+        [{ concepto: 'Pasajes ida y vuelta', monto: Math.round(pasajes),
+           detalle: n + ' tecnico(s) x 2 tramos x ' + formatearPesos_(ta) },
+         { concepto: 'Equipaje de bodega', monto: Math.round(equipaje),
+           detalle: n + ' mochila(s) x 2 tramos. Las herramientas no van en cabina' },
+         { concepto: 'Taxi a los aeropuertos', monto: Math.round(taxi),
+           detalle: '4 carreras de ' + p.P_KM_TERMINAL_CIUDAD + ' km' }]);
+    })));
+  }
+
+  opciones = opciones.filter(function (o) { return o; });
+
+  var ejecutables = opciones.filter(function (o) { return o.aplicable; })
+                            .sort(function (a, b) { return a.total - b.total; });
   var todas = opciones.slice().sort(function (a, b) { return a.total - b.total; });
+  var masRapido = opciones.slice().sort(function (a, b) {
+    return a.horasTotales - b.horasTotales; })[0];
+
+  var mejor = ejecutables.length ? ejecutables[0] : null;
 
   return {
     localidad: destino,
-    equipos: d.equipos || 0,
-    tecnicos: nTecnicos,
+    equipos: equipos,
+    enRM: enRM,
+    // La dotacion ya no se impone desde afuera: la elige el costo.
+    tecnicos: mejor ? mejor.dotacion : nTecnicosSugerido,
+    dotacionesEvaluadas: dotaciones,
     opciones: opciones,
-    masEconomico: ejecutables.length ? ejecutables[0].modo : 'Sin datos suficientes',
-    masRapido: ejecutables.length ? ejecutables.slice().sort(function (a, b) {
-      return a.horasIda - b.horasIda; })[0].modo : 'Sin datos suficientes',
-    masEconomicoTeorico: todas[0].modo,
-    ahorroSiSeLibera: (todas[0].modo !== (ejecutables.length ? ejecutables[0].modo : ''))
-      ? Math.round((ejecutables.length ? ejecutables[0].total : 0) - todas[0].total) : 0
+    masEconomico: mejor ? mejor.modo : 'Sin datos suficientes',
+    dotacionRecomendada: mejor ? mejor.dotacion : 0,
+    costoRecomendado: mejor ? mejor.total : 0,
+    masRapido: masRapido ? masRapido.modo : 'Sin datos suficientes',
+    masEconomicoTeorico: todas.length ? todas[0].modo : '',
+    ahorroSiSeLibera: (todas.length && mejor && todas[0].modo !== mejor.modo)
+      ? Math.round(mejor.total - todas[0].total) : 0
   };
 }

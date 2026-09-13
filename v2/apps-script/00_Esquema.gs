@@ -423,6 +423,20 @@ var ESQUEMA_CONFIG = [
               'Se paga por tecnico y por dia con al menos un tramo asignado, dentro o ' +
               'fuera de la Region Metropolitana.' },
 
+      { clave: 'P_VIATICO_SOLO_FUERA_RM', etiqueta: 'El viatico se paga solo fuera de la Region Metropolitana',
+        valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
+        validacion: { valores: [true, false] },
+        nota: 'REGLA DE JEFATURA. Un tecnico que trabaja en Maipu o en Puente Alto almuerza ' +
+              'y duerme en su casa: no hay viatico. El viatico existe para cubrir al que ' +
+              'esta lejos y no puede volver.' },
+
+      { clave: 'P_VIATICO_SOLO_CON_PERNOCTACION', etiqueta: 'El viatico se paga solo en viajes de mas de un dia',
+        valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
+        validacion: { valores: [true, false] },
+        nota: 'REGLA DE JEFATURA. Ir a Talca y volver el mismo dia no genera viatico: el ' +
+              'tecnico sale y llega a su casa. El viatico se paga por cada dia de un viaje ' +
+              'en que hay que quedarse a dormir fuera.' },
+
       { clave: 'P_UMBRAL_PERNOCTA', etiqueta: 'Umbral de horas de ida para pernoctar',
         valor: 4, unidad: 'h', tipo: 'numero', fuente: 'SUPUESTO',
         validacion: { min: 0, max: 24 },
@@ -707,6 +721,31 @@ var ESQUEMA_CONFIG = [
               'hotel al cliente, entre sitios y de vuelta. Solo aplica cuando se llega sin ' +
               'camioneta. Multiplicado por P_TAXI_POR_KM da el gasto diario de ' +
               'movilizacion, que sustituye al arriendo de vehiculo.' },
+
+      { clave: 'P_KM_MAX_TRANSPORTE_PUBLICO', etiqueta: 'Alcance del metro y la micro desde la base',
+        valor: 40, unidad: 'km', tipo: 'numero', fuente: 'JEFATURA', critico: true,
+        validacion: { min: 0, max: 200 },
+        nota: 'El pasaje de la Red solo sirve dentro del Gran Santiago. Melipilla es Region ' +
+              'Metropolitana pero esta a 62 km: ahi no llega la micro urbana, hay que tomar ' +
+              'bus interurbano y eso cuesta otra cosa. Sobre este kilometraje el comparador ' +
+              'deja de ofrecer transporte publico aunque la localidad sea de la RM.' },
+
+      { clave: 'P_MIN_TECNICOS_FUERA_RM', etiqueta: 'Minimo de tecnicos para salir de la Region Metropolitana',
+        valor: 1, unidad: 'personas', tipo: 'entero', fuente: 'JEFATURA', critico: true,
+        validacion: { min: 1, max: 5 },
+        nota: 'DECISION PENDIENTE DE JEFATURA. En 1 el sistema puede mandar a una persona ' +
+              'sola a Copiapo por cuatro dias, que es lo mas barato pero deja al tecnico ' +
+              'sin respaldo a 800 km, manejando o cargando equipos solo. Muchas empresas ' +
+              'exigen ir de a dos fuera de la region por seguridad. Subirlo a 2 encarece el ' +
+              'plan pero lo hace defendible ante una mutual.' },
+
+      { clave: 'P_FACTOR_TRANSPORTE_PUBLICO', etiqueta: 'Cuanto mas lento es el metro o la micro',
+        valor: 2, unidad: 'factor', tipo: 'numero', fuente: 'SUPUESTO', critico: true,
+        validacion: { min: 1, max: 6 },
+        nota: 'Un trayecto que en camioneta toma 30 minutos, en metro y micro con trasbordo ' +
+              'toma cerca de una hora. Se multiplica el tiempo de Maps por este factor. ' +
+              'Sirve para que el comparador no muestre el transporte publico como si fuera ' +
+              'igual de rapido que el vehiculo.' },
 
       { clave: 'P_TRANSPORTE_PUBLICO', etiqueta: 'Pasaje de metro o micro por tramo',
         valor: 1500, unidad: '$', tipo: 'moneda', fuente: 'SUPUESTO',

@@ -574,3 +574,122 @@ function diagnosticarParametrosWeb(token) {
   exigirSesion_(token);
   return diagnosticarParametros_();
 }
+
+/* ==========================================================================
+ * E. ASISTENTE DE ORDEN
+ * --------------------------------------------------------------------------
+ * Responde la pregunta con la que parte cualquier coordinador: "me llamaron
+ * de Copiapo por 5 equipos, cuanto me sale y a quien mando".
+ *
+ * No pide tarifas ni kilometrajes: los saca de DESTINOS y del catalogo de
+ * peajes. El coordinador solo elige el destino y cuantos equipos son.
+ * ========================================================================== */
+
+/**
+ * Dado un destino y una cantidad de equipos, devuelve todas las formas de
+ * atenderlo con su costo, y cual conviene con el porque escrito.
+ *
+ * @param {string} token
+ * @param {{localidad:string, equipos:number}} solicitud
+ */
+function asistenteOrden(token, solicitud) {
+  exigirSesion_(token);
+
+  var datos = leerDatosDelLibro_();
+  var p = aplicarEscenario_(datos.parametros, ESQUEMA_ESCENARIOS.activo);
+
+  var destino = datos.destinos.filter(function (d) {
+    return d.localidad === solicitud.localidad; })[0];
+  if (!destino) {
+    return { ok: false, mensaje: 'La localidad "' + solicitud.localidad +
+                                 '" no esta en la hoja DESTINOS.' };
+  }
+
+  // Se respeta la cantidad de equipos que pide el coordinador, que puede ser
+  // distinta de la que trae DESTINOS: puede ser un trabajo nuevo.
+  var equipos = Number(solicitud.equipos);
+  if (!(equipos > 0)) equipos = destino.equipos || 1;
+
+  // Rutas: se resuelve el par BASE-destino con la cache.
+  var direcciones = {};
+  datos.destinos.forEach(function (d) { direcciones[d.localidad] = d.direccion; });
+  var r = resolverRutas_([{ origen: 'BASE', destino: destino.localidad }],
+                         direcciones, datos.parametros, datos.libro);
+
+  // Se arma un contexto con la cantidad de equipos solicitada.
+  var destinosAjustados = {};
+  datos.destinos.forEach(function (d) {
+    destinosAjustados[d.localidad] = (d.localidad === destino.localidad)
+      ? JSON.parse(JSON.stringify(d)) : d;
+  });
+  destinosAjustados[destino.localidad].equipos = equipos;
+
+  var ctx = {
+    p: p,
+    destinos: destinosAjustados,
+    rutas: r.rutas,
+    ajustesPeaje: datos.ajustesPeaje,
+    alertas: []
+  };
+
+  var comparacion = compararModos_(destino.localidad, p.P_TECNICOS_POR_CUADRILLA, ctx);
+  if (!comparacion) {
+    return { ok: false, mensaje: 'No se pudo evaluar el destino.' };
+  }
+
+  var rec = comparacion.recomendacion;
+  var elegida = rec && rec.elegida;
+
+  // Un resumen en una sola frase, que es lo que el coordinador necesita leer.
+  var titular = elegida
+    ? ('Manda ' + elegida.dotacion + ' tecnico' + (elegida.dotacion > 1 ? 's' : '') +
+       ' en ' + elegida.modo.toLowerCase() +
+       (elegida.modo === 'Camioneta'
+          ? ' (' + Math.ceil(elegida.dotacion / p.P_CAPACIDAD_CAMIONETA) + ' vehiculo' +
+            (Math.ceil(elegida.dotacion / p.P_CAPACIDAD_CAMIONETA) > 1 ? 's' : '') + ')'
+          : '') +
+       '. Sale ' + formatearPesos_(elegida.total) +
+       ' y toma ' + elegida.dias + ' dia' + (elegida.dias > 1 ? 's' : '') +
+       (elegida.noches ? ' con ' + elegida.noches + ' noche' +
+         (elegida.noches > 1 ? 's' : '') + ' de hotel' : ', sin pernoctar') + '.')
+    : 'No hay alternativas ejecutables con los datos cargados.';
+
+  return {
+    ok: true,
+    localidad: destino.localidad,
+    direccion: destino.direccion,
+    region: destino.region,
+    enRM: comparacion.enRM,
+    equipos: equipos,
+    hotelReferencia: destino.hotel,
+    titular: titular,
+    recomendacion: rec,
+    opciones: comparacion.opciones,
+    dotacionesEvaluadas: comparacion.dotacionesEvaluadas,
+    parametros: {
+      capacidadCamioneta: p.P_CAPACIDAD_CAMIONETA,
+      viatico: p.P_VIATICO,
+      colacion: p.P_COLACION_RM,
+      hotel: p.P_HOTEL
+    }
+  };
+}
+
+/** Lista simple de destinos para llenar el selector del asistente. */
+function listarDestinos(token) {
+  exigirSesion_(token);
+  var datos = leerDatosDelLibro_();
+  return datos.destinos
+    .filter(function (d) { return d.localidad !== 'BASE'; })
+    .map(function (d) {
+      return {
+        localidad: d.localidad,
+        region: d.region,
+        direccion: d.direccion,
+        equipos: d.equipos,
+        enRM: String(d.enRM || '').toLowerCase().indexOf('s') === 0,
+        km: d.km,
+        hotel: d.hotel
+      };
+    });
+}

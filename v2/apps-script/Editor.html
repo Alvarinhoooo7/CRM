@@ -5,8 +5,8 @@ function avisar(texto, error) {
   e.className = 'alerta ' + (error ? 'error' : 'bien'); e.textContent = texto;
 }
 function llamadaEditor(nombre, args, despues) {
-  document.querySelectorAll('#vista-gestion button').forEach(function (b) { b.disabled = true; });
-  var terminar = function () { document.querySelectorAll('#vista-gestion button').forEach(function (b) { b.disabled = false; }); };
+  document.querySelectorAll('#vista-ajustes button').forEach(function (b) { b.disabled = true; });
+  var terminar = function () { document.querySelectorAll('#vista-ajustes button').forEach(function (b) { b.disabled = false; }); };
   var run = google.script.run.withSuccessHandler(function (r) {
     terminar(); if (r.ok === false) { avisar(r.mensaje, true); return; }
     if (r.mensaje) avisar(r.mensaje); if (despues) despues(r);

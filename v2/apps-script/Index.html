@@ -8,12 +8,12 @@
 <body data-vista="<?= vistaInicial ?>" data-tecnico="<?= tecnicoInicial ?>">
 
 <!-- ==================================================================
-     PANTALLA DE INGRESO
+     INGRESO
      ================================================================== -->
 <div id="login" class="pantalla-login">
   <div class="caja-login">
     <h1><?= nombreApp ?></h1>
-    <div class="sub">Panel de planificacion y control · v<?= version ?></div>
+    <div class="sub">Panel de planificación · v<?= version ?></div>
 
     <div class="campo">
       <label for="email">Correo</label>
@@ -25,17 +25,16 @@
     </div>
 
     <div id="errorLogin" class="error-caja oculto" style="margin-bottom:14px"></div>
-
     <button class="btn btn-ancho" id="btnEntrar" onclick="entrar()">Entrar</button>
 
     <div class="nota-fuente">
-      El acceso se valida en el servidor: las credenciales se verifican al ingresar. Acceso compartido de demostración; sesión de hasta 6 horas.
+      Las credenciales se verifican en el servidor. La sesión dura 6 horas.
     </div>
   </div>
 </div>
 
 <!-- ==================================================================
-     APLICACION
+     APLICACIÓN · CINCO PANTALLAS
      ================================================================== -->
 <div id="app" class="oculto">
 
@@ -51,204 +50,152 @@
   </div>
 
   <div class="pestanas">
-    <button class="pestana" data-vista="operacion" onclick="mostrar('operacion')">Rutas y flota</button>
-    <button class="pestana activa" data-vista="resumen"     onclick="mostrar('resumen')">Resumen</button>
-    <button class="pestana"        data-vista="gastos"      onclick="mostrar('gastos')">Gastos</button>
-    <button class="pestana"        data-vista="tecnicos"    onclick="mostrar('tecnicos')">Tecnicos</button>
-    <button class="pestana"        data-vista="calendario"  onclick="mostrar('calendario')">Calendario</button>
-    <button class="pestana"        data-vista="transporte"  onclick="mostrar('transporte')">Transporte</button>
-    <button class="pestana"        data-vista="peajes"      onclick="mostrar('peajes')">Peajes</button>
-    <button class="pestana"        data-vista="orden"       onclick="mostrar('orden')">Orden de servicio</button>
-    <button class="pestana" data-vista="gestion" onclick="mostrar('gestion')">Planificación</button>
-    <button class="pestana" data-vista="guia" onclick="mostrar('guia')">Guía del equipo</button>
-    <button class="pestana" data-vista="configuracion" onclick="mostrar('configuracion')">Configuración</button>
+    <button class="pestana activa" data-vista="hoy"    onclick="mostrar('hoy')">1 · Qué hay que hacer</button>
+    <button class="pestana"        data-vista="agenda" onclick="mostrar('agenda')">2 · Agendar y calendario</button>
+    <button class="pestana"        data-vista="dinero" onclick="mostrar('dinero')">3 · La plata</button>
+    <button class="pestana"        data-vista="equipo" onclick="mostrar('equipo')">4 · El equipo</button>
+    <button class="pestana"        data-vista="ajustes" onclick="mostrar('ajustes')">5 · Ajustes y ayuda</button>
   </div>
 
   <div class="contenido">
-    <div class="banda-contexto"><span class="punto-vivo"></span> CASO ACADÉMICO · 33 EQUIPOS / 16 LOCALIDADES <span>Presupuestos estimados · sin transferencias bancarias</span></div>
+    <div class="banda-contexto"><span class="punto-vivo"></span> CASO ACADÉMICO · 33 EQUIPOS / 16 LOCALIDADES
+      <span>Presupuestos estimados · sin transferencias bancarias</span></div>
     <div id="notificacion" role="status" aria-live="polite" class="oculto"></div>
 
     <div id="cargando" class="cargando">
       <div class="girador"></div>
-      <div id="textoCargando">Calculando el plan y consultando Google Maps...</div>
+      <div id="textoCargando">Calculando…</div>
     </div>
-
     <div id="errorGeneral" role="alert" class="error-caja oculto"></div>
-    <div class="vista" id="vista-configuracion">
-      <div class="intro-vista"><div><div class="sobretitulo">MANTENIMIENTO</div><h2>Configuración y Diagnóstico</h2><p>Herramientas técnicas para sincronizar con Excel y verificar la conexión a Google Maps.</p></div></div>
-      
-      <div class="tarjeta" id="tarjetaParametros">
-        <h2>Parámetros del sistema</h2>
-        <p class="ayuda">Cuando el sistema incorpora funciones nuevas, la hoja CONFIG puede
-        quedarse sin los parámetros que esas funciones necesitan y el cálculo falla. Este
-        botón agrega <b>solo lo que falta</b> al final de CONFIG y no toca ningún valor que
-        usted ya haya configurado. No borra el plan.</p>
-        <div id="estadoParametros" role="status" class="chico">Revisando…</div>
-        <div class="acciones-editor" style="margin-top:12px">
-          <button class="btn" id="btnSincronizar" onclick="sincronizarParametros()">Actualizar CONFIG con parámetros nuevos</button>
+
+    <!-- ============================================================
+         1 · QUÉ HAY QUE HACER
+         ============================================================ -->
+    <div class="vista activa" id="vista-hoy">
+
+      <div class="intro-vista">
+        <div>
+          <div class="sobretitulo">PANTALLA 1 DE 5</div>
+          <h2>Qué hay que hacer</h2>
+          <p>El estado del plan completo en una pantalla: cuánto sale, cuánto falta
+             y qué problemas hay que resolver antes de mandar a alguien a la ruta.</p>
         </div>
       </div>
 
-      <div class="tarjeta">
-        <h2>Sincronización de Datos</h2>
-        <p class="ayuda">Si realizaste grandes cambios en el Excel (Google Sheets) o si notas que la información está desactualizada, presiona este botón.</p>
-        <div class="acciones-editor"><button class="btn" onclick="recalcular()">Forzar Recálculo Completo</button></div>
-      </div>
-
-      <div class="tarjeta conexion-maps">
-        <div><h2>Rutas de Google Maps</h2><p id="estadoMaps" role="status">Revise la conexión y actualice las rutas cuando lo necesite.</p></div>
-        <div class="acciones-editor"><button class="btn btn-secundario" id="btnDiagnosticoMaps" onclick="probarMapsWeb()">Probar conexión</button><button class="btn" id="btnActualizarMaps" onclick="actualizarLoteMaps()">Actualizar Maps</button></div>
-        <details><summary>Cómo conectar Google Maps</summary><p>Sin clave: servicio nativo de Apps Script. Con clave propia: habilite Routes API y facturación en Google Cloud; en Propiedades del script defina MAPS_PROVEEDOR = ROUTES_API y GOOGLE_MAPS_API_KEY. No coloque la clave en este formulario ni en el manifiesto.</p></details>
-      </div>
-
-      <div class="tarjeta">
-        <h2>Reconstrucción de Base de Datos</h2>
-        <p class="ayuda" style="color:#d32f2f">Si el Excel se corrompió irreparablemente o recibes advertencias de columnas perdidas, este botón borrará el archivo de configuración actual y regenerará las pestañas y tablas base por defecto. <b>Podrías perder configuraciones previas.</b></p>
-        <div class="acciones-editor"><button class="btn btn-acento" style="background:#d32f2f;border-color:#b71c1c" onclick="confirmarRestauracion()">Crear o restaurar hojas base</button></div>
-      </div>
-    </div>
-
-    <div class="vista" id="vista-operacion">
-      <div class="intro-vista"><div><div class="sobretitulo">CENTRO DE OPERACIONES</div><h2>Todo el recorrido, a la vista.</h2><p>Cuadrillas, vehículos y visitas del escenario seleccionado.</p></div><button class="btn btn-secundario" onclick="descargarPlan()">Descargar itinerario CSV</button></div>
-      <div class="tarjeta"><div class="fila-form"><div class="campo"><label for="filtroRuta">Buscar localidad o técnico</label><input id="filtroRuta" type="search" placeholder="Copiapó, T01, C2…" oninput="dibujarOperacion()"></div><div class="campo"><label for="filtroDiaRuta">Día del plan</label><select id="filtroDiaRuta" onchange="dibujarOperacion()"><option value="">Todos los días</option></select></div></div></div>
-      <div id="cuadrillas" class="rejilla rejilla-3"></div>
-      <div class="tarjeta"><h2>Itinerario por tramo</h2><p class="ayuda">Los enlaces abren la dirección en Maps. Confirme allí el trayecto: el enlace no garantiza la misma autopista usada en el presupuesto.</p><div class="tabla-envoltorio"><table class="datos" id="tablaItinerario"></table></div></div>
-      <div class="tarjeta"><h2>Disponibilidad de la flota</h2><div class="rejilla rejilla-3" id="flota"></div></div>
-    </div>
-
-    <div class="vista" id="vista-gestion">
-      <div class="intro-vista"><div><div class="sobretitulo">COORDINACIÓN</div><h2>Prepara la próxima salida.</h2><p>Guarda los cambios y recalcula para revisar su efecto en el presupuesto.</p></div><button class="btn btn-secundario" onclick="cargarEditor()">Recargar editor</button></div>
-      <div id="estadoEditor" role="status"></div>
-      <div class="tarjeta"><h2>Direcciones, alojamiento y capacitación</h2><p class="ayuda">Las cantidades del caso se conservan. Registre el hotel y el enlace de material confirmado; esta aplicación no realiza reservas ni envía correos.</p><form id="formDestino" onsubmit="event.preventDefault(); guardarDestinoWeb()"><div class="fila-form"><div class="campo"><label for="editLocalidad">Localidad</label><select id="editLocalidad" onchange="seleccionarDestino()"></select></div><div class="campo"><label for="editDireccion">Dirección exacta</label><input id="editDireccion" required maxlength="500"></div></div><div class="fila-form" style="margin-top:16px"><div class="campo"><label for="editHotel">Hotel propuesto y dirección</label><input id="editHotel" maxlength="500"></div><div class="campo"><label for="editEnlace">Material de capacitación (HTTPS)</label><input id="editEnlace" type="url" placeholder="https://drive.google.com/…"></div><button class="btn" type="submit">Guardar destino</button></div></form></div>
-      <div class="tarjeta"><h2>Editar el plan</h2><p class="ayuda">Cada fila representa un traslado seguido del trabajo en el destino. Se valida continuidad, conductor, técnicos y vehículo. Las alertas de jornada se revisan después de recalcular. Borrar una fila solo modifica el borrador hasta guardar.</p><div class="acciones-editor"><button class="btn btn-secundario" onclick="agregarTramo()">Agregar tramo</button><button class="btn" onclick="guardarTramos()">Guardar plan</button></div><div class="tabla-envoltorio"><table class="datos editor-plan" id="editorPlan"></table></div></div>
-      <div class="tarjeta"><h2>Parámetros del presupuesto</h2><p class="ayuda">Los datos del PDF y los valores calculados aparecen bloqueados. Los cambios de capacitación pueden estar sobrescritos por el escenario seleccionado.</p><input type="search" id="buscarConfig" aria-label="Buscar parámetro" placeholder="Buscar diésel, hotel, jornada…" oninput="filtrarConfig()"><div id="editorConfig"></div></div>
-    </div>
-
-    <div class="vista" id="vista-guia">
-      <div id="manualCompleto"></div>
-      <div class="intro-vista"><div><div class="sobretitulo">PRESENTACIÓN · 4 INTEGRANTES</div><h2>Entender el plan. Explicar las decisiones.</h2><p>Un recorrido de 15 minutos por el problema, los cálculos y la experiencia del técnico.</p></div></div>
-      <div class="rejilla rejilla-2">
-        <div class="tarjeta"><h2>01 · Caso y alcance ℹ️</h2><p>10 técnicos y 6 Peugeot Partner para 33 equipos en 16 localidades. El escenario literal considera 2 horas de instalación y 30 minutos de capacitación por equipo. Las cuadrillas de tres son una decisión del equipo.</p><button class="btn btn-secundario" onclick="mostrar('resumen')">Mostrar resumen</button></div>
-        <div class="tarjeta"><h2>02 · Rutas y recursos ℹ️</h2><p>Explica los corredores norte, sur y RM. Abre el itinerario, identifica conductor y vehículo y muestra las noches. El motor evalúa el plan ingresado; no demuestra un óptimo global.</p><button class="btn btn-secundario" onclick="mostrar('operacion')">Mostrar rutas</button></div>
-        <div class="tarjeta"><h2>03 · Presupuesto · 4 minutos</h2><p>Combustible = km ÷ 20 × precio del litro. Hotel por persona y noche; viático una vez por técnico y día. La transferencia incluye gastos financiados por el técnico y reserva, pero no desgaste ni todos los costos empresariales.</p><button class="btn btn-secundario" onclick="mostrar('gastos')">Mostrar gastos</button></div>
-        <div class="tarjeta"><h2>04 · Técnico y mejora · 4 minutos</h2><p>Abre la orden de T01: ruta, hotel, vehículo e implementos. Exporta el PDF y compara los dos escenarios. La capacitación digital es una propuesta que debe validarse con el cliente y el docente.</p><button class="btn btn-secundario" onclick="mostrar('orden')">Mostrar orden</button></div>
-      </div>
-      <div class="tarjeta"><h2>Preguntas que todos deben poder responder</h2>
-        <details><summary>¿Por qué el gasto total difiere de las transferencias?</summary><p>El total incluye costos de operación como desgaste y sobretiempo. Las transferencias solo incluyen conceptos pagados por los técnicos, reserva y redondeo. Los peajes TAG pueden ser pagados por la empresa.</p></details>
-        <details><summary>¿Qué significan los dos escenarios?</summary><p>Literal: 33 capacitaciones de 30 minutos. Mejora propuesta: 16 sesiones de 15 minutos con preparación digital. Son 12,5 horas de sesiones menos, no necesariamente 12,5 horas-persona: el motor contabiliza el tiempo de toda la cuadrilla.</p></details>
-        <details><summary>¿Son valores reales y trabajos terminados?</summary><p>Son equipos planificados. Rutas de Maps son estimaciones de viaje; peajes dependen del recorrido y horario. Hoteles y pasajes son referenciales. No hay confirmación de instalaciones realizadas ni pagos bancarios.</p></details>
-        <details><summary>¿Cómo se mejora el servicio?</summary><p>Medir viaje y trabajo real, validar capacitación previa y cotizar herramientas transportables antes de invertir en más vehículos. Comparar los escenarios y justificar cada supuesto con evidencia.</p></details>
-      </div>
-    </div>
-
-    <!-- ---------- RESUMEN ---------- -->
-    <div class="vista activa" id="vista-resumen">
-      <div class="tarjeta"><h2>Órdenes gestionadas desde la web</h2><div id="resumenAgenda">Abra Calendario para cargar las órdenes guardadas.</div><p class="ayuda">El panel inferior analiza el plan del caso. Las órdenes nuevas tienen su propio presupuesto confirmado y aparecen en el calendario.</p></div>
       <div class="rejilla rejilla-4" id="kpis"></div>
 
       <div class="tarjeta">
-        <h2>Alertas del sistema</h2>
+        <h2>Problemas que hay que resolver</h2>
         <p class="ayuda">
-          Los errores impiden ejecutar el plan tal como esta. Los avisos son hallazgos
-          que conviene mirar antes de transferir dinero, no fallas.
+          Lo <b>rojo</b> impide ejecutar el plan: hay que corregirlo en la pantalla 5.
+          Lo <b>amarillo</b> no impide nada, pero conviene mirarlo antes de transferir plata.
+          Si no aparece nada, el plan está listo.
         </p>
         <div id="alertas"></div>
       </div>
 
+      <div class="tarjeta">
+        <h2>El recorrido, cuadrilla por cuadrilla</h2>
+        <p class="ayuda">Cada tarjeta es un grupo de técnicos que viaja junto.</p>
+        <div class="fila-form" style="margin-bottom:14px">
+          <div class="campo">
+            <label for="filtroRuta">Buscar una localidad o un técnico</label>
+            <input id="filtroRuta" type="search" placeholder="Copiapó, Pepe, Cuadrilla 2…"
+                   oninput="dibujarOperacion()">
+          </div>
+          <div class="campo">
+            <label for="filtroDiaRuta">Ver un solo día</label>
+            <select id="filtroDiaRuta" onchange="dibujarOperacion()">
+              <option value="">Todos los días</option>
+            </select>
+          </div>
+          <button class="btn btn-secundario" onclick="descargarPlan()">Descargar en Excel</button>
+        </div>
+        <div id="cuadrillas" class="rejilla rejilla-3"></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Viaje por viaje</h2>
+        <p class="ayuda">Cada fila es un traslado más el trabajo que se hace al llegar.
+           Los enlaces abren la dirección en Google Maps.</p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaItinerario"></table></div>
+      </div>
+
       <div class="rejilla rejilla-2">
         <div class="tarjeta">
-          <h2>Gasto por localidad</h2>
-          <div id="graficoGastoLocalidad" class="grafico"></div>
+          <h2>Camionetas</h2>
+          <div class="rejilla rejilla-3" id="flota"></div>
         </div>
         <div class="tarjeta">
-          <h2>Equipos por localidad</h2>
-          <div id="graficoEquipos" class="grafico"></div>
+          <h2>Comparación de escenarios</h2>
+          <p class="ayuda" id="ayudaEscenario"></p>
+          <div class="tabla-envoltorio"><table class="datos" id="tablaEscenarios"></table></div>
         </div>
       </div>
 
       <div class="tarjeta">
-        <h2>Comparacion de escenarios</h2>
-        <p class="ayuda" id="ayudaEscenario"></p>
-        <div class="tabla-envoltorio"><table class="datos" id="tablaEscenarios"></table></div>
-      </div>
-
-      <div class="tarjeta">
-        <h2>Conclusiones del analisis</h2>
+        <h2>Lo que concluye el análisis</h2>
+        <p class="ayuda">Estas conclusiones no están escritas a mano: salen de los números
+           de arriba y se recalculan solas.</p>
         <div id="conclusiones"></div>
       </div>
     </div>
 
-    <!-- ---------- GASTOS ---------- -->
-    <div class="vista" id="vista-gastos">
-      <div class="tarjeta"><h2>Presupuesto de las órdenes agendadas</h2><div class="tabla-envoltorio"><table class="datos" id="tablaCostosAgenda"></table></div><p class="ayuda">Presupuestos guardados al decidir cada orden; no son gastos rendidos ni pagos bancarios. El desglose del plan original se muestra debajo.</p></div>
-      <div class="rejilla rejilla-2">
-        <div class="tarjeta">
-          <h2>Composicion del gasto</h2>
-          <div id="graficoComposicion" class="grafico"></div>
+    <!-- ============================================================
+         2 · AGENDAR Y CALENDARIO
+         ============================================================ -->
+    <div class="vista" id="vista-agenda">
+
+      <div class="intro-vista">
+        <div>
+          <div class="sobretitulo">PANTALLA 2 DE 5</div>
+          <h2>Agendar un trabajo nuevo</h2>
+          <p>Elige el destino y cuántos equipos son. El sistema calcula solo cuánto sale
+             en camioneta, bus, avión o metro, y te dice cuál conviene y por qué.</p>
         </div>
-        <div class="tarjeta">
-          <h2>Costos directos de tramos por día</h2>
-          <p class="ayuda">Incluye costos de traslado y hotel. Los viáticos, sobretiempo y reserva están en el total del plan.</p>
-          <div id="graficoGastoDia" class="grafico"></div>
-        </div>
       </div>
 
-      <div class="tarjeta">
-        <h2>Detalle por categoria</h2>
-        <div class="tabla-envoltorio"><table class="datos" id="tablaCategorias"></table></div>
-      </div>
-
-      <div class="tarjeta">
-        <h2>Detalle por localidad</h2>
-        <div class="tabla-envoltorio"><table class="datos" id="tablaLocalidades"></table></div>
-      </div>
-
-      <div class="tarjeta">
-        <h2>Transferencia por tecnico</h2>
-        <p class="ayuda">
-          Responde textualmente lo que pide el enunciado: cuanto dinero necesita cada
-          tecnico para hacer su ruta. El monto se redondea hacia arriba e incluye una
-          holgura para imprevistos.
-        </p>
-        <div class="tabla-envoltorio"><table class="datos" id="tablaTransferencias"></table></div>
-      </div>
-    </div>
-
-    <!-- ---------- TECNICOS ---------- -->
-    <div class="vista" id="vista-tecnicos">
-      <div class="tarjeta">
-        <h2>Carga por tecnico</h2>
-        <p class="ayuda">Haga clic en los encabezados para ordenar.</p>
-        <div class="tabla-envoltorio"><table class="datos" id="tablaTecnicos"></table></div>
-      </div>
-
-      <div class="tarjeta">
-        <h2>Horas en sitio contra horas en traslado</h2>
-        <div id="graficoHoras" class="grafico"></div>
-      </div>
-
-      <div class="tarjeta">
-        <h2>Ficha individual</h2>
-        <div class="fila-form" style="margin-bottom:16px">
+      <!-- ASISTENTE: lo primero que ve el coordinador -->
+      <div class="tarjeta asistente">
+        <h2>Paso 1 · ¿A dónde y cuántos equipos?</h2>
+        <p class="ayuda">Con esos dos datos basta. No hace falta saber tarifas ni kilómetros.</p>
+        <div class="fila-form">
           <div class="campo">
-            <label>Tecnico</label>
-            <select id="selectorFicha" onchange="dibujarFicha()"></select>
+            <label for="asisLocalidad">Destino</label>
+            <select id="asisLocalidad" onchange="consultarAsistente()"></select>
           </div>
+          <div class="campo">
+            <label for="asisEquipos">Equipos a instalar</label>
+            <input type="number" id="asisEquipos" min="1" max="99" value="1"
+                   onchange="consultarAsistente()" oninput="consultarAsistente()">
+          </div>
+          <button class="btn" onclick="consultarAsistente()">Calcular</button>
         </div>
-        <div id="ficha"></div>
+        <div id="asistenteResultado" style="margin-top:18px"></div>
       </div>
-    </div>
 
-    <!-- ---------- CALENDARIO ---------- -->
-    <div class="vista" id="vista-calendario">
-      <div class="intro-vista"><div><div class="sobretitulo">BITÁCORA DE TRABAJOS</div><h2>Selecciona una fecha. Registra el trabajo.</h2><p>Registra las órdenes completadas para llevar el historial. Todo se guarda en tu Excel (Google Sheets).</p></div><button class="btn" onclick="nuevaOrdenAgenda()">+ Registrar Trabajo</button></div>
-      <div id="mensajeAgenda" role="status"></div>
-      <div class="agenda-disposicion">
-        <div class="tarjeta agenda-mes"><div class="barra-mes"><button class="btn btn-secundario" aria-label="Mes anterior" onclick="moverMesAgenda(-1)">←</button><h2 id="tituloMesAgenda"></h2><button class="btn btn-secundario" aria-label="Mes siguiente" onclick="moverMesAgenda(1)">→</button><button class="btn btn-secundario" onclick="hoyAgenda()">Hoy</button><button class="btn btn-secundario" onclick="cargarAgenda()">Actualizar</button></div><div class="dias-semana"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div><div class="rejilla-calendario" id="rejillaAgenda"></div><p class="ayuda">Azul: Historial Base. Verde: Trabajos Registrados. Haz clic en un día para ver los detalles. Un día puede contener varias visitas.</p></div>
-        <div class="tarjeta agenda-dia"><h2 id="tituloDiaAgenda">Selecciona una fecha</h2><div id="detalleDiaAgenda"></div></div>
+      <!-- CALENDARIO -->
+      <div class="tarjeta">
+        <h2>Paso 2 · Elige el día</h2>
+        <p class="ayuda">Haz clic en un día para ver qué hay agendado y abrir el formulario.</p>
+        <div class="barra-calendario">
+          <button class="btn btn-chico btn-secundario" onclick="moverMesAgenda(-1)">&larr; Mes anterior</button>
+          <b id="tituloMesAgenda"></b>
+          <button class="btn btn-chico btn-secundario" onclick="moverMesAgenda(1)">Mes siguiente &rarr;</button>
+          <button class="btn btn-chico" onclick="hoyAgenda()">Ir a hoy</button>
+        </div>
+        <div id="rejillaAgenda"></div>
       </div>
-      <div id="formularioAgenda" class="tarjeta oculto">
-        <div class="barra-mes"><h2 id="tituloFormularioAgenda">Registrar trabajo completado</h2><button class="btn btn-secundario" onclick="cerrarFormularioAgenda()">Cerrar</button></div>
+
+      <div class="tarjeta">
+        <h2 id="tituloDiaAgenda">Detalle del día</h2>
+        <div id="detalleDiaAgenda"></div>
+      </div>
+
+      <!-- FORMULARIO -->
+      <div class="tarjeta" id="formularioAgenda">
+        <h2 id="tituloFormularioAgenda">Paso 3 · Completa la orden</h2>
+        <div id="mensajeAgenda" role="status"></div>
         <form id="formOrdenAgenda" onsubmit="event.preventDefault();compararAgenda()" oninput="invalidarPreviaAgenda()" onchange="invalidarPreviaAgenda()">
           <div class="rejilla rejilla-3">
             <div class="campo"><label for="agendaCliente">Cliente / nombre del servicio</label><input id="agendaCliente" required maxlength="120"></div>
@@ -276,120 +223,333 @@
           <div class="campo"><label for="agendaNotas">Observaciones y fuente/fecha de las cotizaciones</label><input id="agendaNotas" maxlength="1000"></div>
           <button id="btnCompararAgenda" class="btn" type="submit">Calcular costos logísticos</button>
         </form>
-        <div id="comparacionAgenda" class="comparacion-agenda"></div>
-        <button id="btnGuardarAgenda" class="btn btn-acento oculto" onclick="confirmarOrdenAgenda()">Guardar Registro</button>
-        <p class="ayuda">Reserva estimada desde la salida hasta el regreso a base. Las salidas de varios días reservan bloques diarios; confirme los alojamientos y paradas intermedias. No se reservan pasajes ni hoteles automáticamente.</p>
-      </div>
-      <details class="tarjeta"><summary>Ver carga del plan original y simulador de referencia</summary>
-      <div class="tarjeta">
-        <h2>Horas asignadas por tecnico y dia</h2>
-        <p class="ayuda">Coloreado segun el semaforo de jornada.</p>
-        <div class="tabla-envoltorio"><table class="matriz" id="matrizAsignadas"></table></div>
+        <div id="comparacionAgenda"></div>
+        <div class="acciones-editor" style="margin-top:14px">
+          <button id="btnGuardarAgenda" class="btn btn-acento oculto"
+                  onclick="confirmarOrdenAgenda()">Guardar la orden</button>
+        </div>
       </div>
 
+      <!-- AGENDA DE CAPACIDAD -->
       <div class="tarjeta">
-        <h2>Horas libres</h2>
-        <p class="ayuda">
-          Esta es la holgura teórica del plan: lo que queda de la
-          jornada efectiva despues de lo ya planificado.
-        </p>
+        <h2>¿Quién tiene hueco?</h2>
+        <p class="ayuda">Horas que le quedan libres a cada técnico. Es la agenda real para
+           comprometer un trabajo nuevo.</p>
         <div class="tabla-envoltorio"><table class="matriz" id="matrizLibres"></table></div>
       </div>
 
-      <div class="tarjeta">
-        <h2>Simular un trabajo nuevo</h2>
-        <p class="ayuda">
-          No escribe nada en las hojas. Responde si cabe en la jornada, cuantas horas
-          ocuparia y cuanto costaria.
-        </p>
+      <details class="tarjeta">
+        <summary><b>Ver horas ya asignadas</b></summary>
+        <div class="tabla-envoltorio" style="margin-top:12px">
+          <table class="matriz" id="matrizAsignadas"></table>
+        </div>
+      </details>
+
+      <details class="tarjeta">
+        <summary><b>Simulador rápido sin guardar nada</b></summary>
+        <p class="ayuda" style="margin-top:10px">Prueba un trabajo y mira si cabe en la jornada.
+           No escribe nada en la planilla.</p>
         <div class="fila-form">
-          <div class="campo">
-            <label>Localidad</label>
-            <select id="simLocalidad"></select>
-          </div>
-          <div class="campo">
-            <label>Equipos</label>
-            <input type="number" id="simEquipos" value="2" min="1" max="99">
-          </div>
-          <div class="campo">
-            <label>Tecnicos</label>
-            <input type="number" id="simTecnicos" value="3" min="1" max="10">
-          </div>
-          <div class="campo">
-            <label>Dia</label>
-            <select id="simDia"></select>
-          </div>
+          <div class="campo"><label>Localidad</label><select id="simLocalidad"></select></div>
+          <div class="campo"><label>Equipos</label>
+            <input type="number" id="simEquipos" value="2" min="1" max="99"></div>
+          <div class="campo"><label>Técnicos</label>
+            <input type="number" id="simTecnicos" value="3" min="1" max="10"></div>
+          <div class="campo"><label>Día</label><select id="simDia"></select></div>
           <button class="btn" onclick="simular()">Simular</button>
         </div>
         <div id="resultadoSimulacion" style="margin-top:16px"></div>
-      </div>
       </details>
     </div>
 
-    <!-- ---------- TRANSPORTE ---------- -->
-    <div class="vista" id="vista-transporte">
+    <!-- ============================================================
+         3 · LA PLATA
+         ============================================================ -->
+    <div class="vista" id="vista-dinero">
+
+      <div class="intro-vista">
+        <div>
+          <div class="sobretitulo">PANTALLA 3 DE 5</div>
+          <h2>La plata</h2>
+          <p>En qué se gasta, cuánto hay que transferirle a cada técnico y por qué se
+             eligió cada forma de viajar.</p>
+        </div>
+      </div>
+
+      <div class="tarjeta destacada">
+        <h2>Cuánto transferirle a cada técnico</h2>
+        <p class="ayuda">Es el monto que se le deposita antes de salir. Ya viene redondeado
+           hacia arriba e incluye una holgura para imprevistos.</p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaTransferencias"></table></div>
+      </div>
+
+      <div class="rejilla rejilla-2">
+        <div class="tarjeta">
+          <h2>En qué se va la plata</h2>
+          <div id="graficoComposicion" class="grafico"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Gasto por día</h2>
+          <p class="ayuda">Traslados y hotel. Viáticos y sobretiempo están en el total.</p>
+          <div id="graficoGastoDia" class="grafico"></div>
+        </div>
+      </div>
+
+      <div class="rejilla rejilla-2">
+        <div class="tarjeta">
+          <h2>Detalle por categoría</h2>
+          <div class="tabla-envoltorio"><table class="datos" id="tablaCategorias"></table></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Órdenes agendadas</h2>
+          <div class="tabla-envoltorio"><table class="datos" id="tablaCostosAgenda"></table></div>
+          <p class="ayuda">Presupuestos guardados al agendar. No son gastos rendidos.</p>
+        </div>
+      </div>
+
       <div class="tarjeta">
-        <h2>Comparador de modos por localidad</h2>
-        <p class="ayuda">
-          Viaje completo de ida y vuelta para la dotacion asignada. Bus y avión son alternativas referenciales. El comparador no modifica el plan; hay que cotizar horarios, conexiones y traslado de herramientas.
-        </p>
+        <h2>Cuánto cuesta cada localidad</h2>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaLocalidades"></table></div>
+      </div>
+
+      <div class="rejilla rejilla-2">
+        <div class="tarjeta">
+          <h2>Gasto por localidad</h2>
+          <div id="graficoGastoLocalidad" class="grafico"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Equipos por localidad</h2>
+          <div id="graficoEquipos" class="grafico"></div>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Camioneta, bus o avión: cuál conviene en cada destino</h2>
+        <p class="ayuda">Los totales incluyen <b>todo</b>: pasajes, equipaje, taxis, hotel y
+           viáticos. No es solo el precio del pasaje.</p>
         <div class="tabla-envoltorio"><table class="datos" id="tablaModos"></table></div>
-        <div class="fila-form" style="margin-top:18px"><div class="campo"><label for="selectorDetalleModo">Ver el detalle completo de un destino</label><select id="selectorDetalleModo" onchange="dibujarDetalleModo()"></select></div></div>
+        <div class="fila-form" style="margin-top:18px">
+          <div class="campo">
+            <label for="selectorDetalleModo">Ver el detalle completo de un destino</label>
+            <select id="selectorDetalleModo" onchange="dibujarDetalleModo()"></select>
+          </div>
+        </div>
         <div id="detalleModo"></div>
       </div>
 
       <div class="tarjeta">
-        <h2>Circuitos: agrupar varias localidades en un solo viaje</h2>
-        <p class="ayuda">Atender tres ciudades del norte por separado significa hacer tres
-        veces el mismo viaje largo. En un circuito se hace una sola vez y el traslado se
-        reparte entre todos los equipos instalados. <b>No siempre conviene</b>: el circuito
-        obliga a llevar la misma cuadrilla a todas las paradas, aunque una necesitara una
-        sola persona. Por eso se calcula y se compara, no se asume.</p>
+        <h2>Agrupar varias localidades en un solo viaje</h2>
+        <p class="ayuda">Atender tres ciudades del norte por separado significa hacer tres veces
+           el mismo viaje largo. <b>No siempre conviene</b>: el circuito obliga a llevar la misma
+           cuadrilla a todas las paradas. Por eso se calcula y se compara.</p>
         <div id="circuitos"></div>
       </div>
 
-      <div class="tarjeta">
-        <h2>Decision de ruta: autopista o rodeo</h2>
-        <p class="ayuda">
-          Cada tramo se consulta dos veces a Google Maps, con y sin peajes. La decision
-          depende de donde cae el tiempo adicional: si cabe en la jornada ya esta pagado,
-          si la excede cuesta hora extra con recargo.
-        </p>
-        <div class="tabla-envoltorio"><table class="datos" id="tablaRutas"></table></div>
-      </div>
-    </div>
-
-    <!-- ---------- PEAJES ---------- -->
-    <div class="vista" id="vista-peajes">
-      <div class="tarjeta">
-        <h2>Catalogo de plazas y porticos</h2>
-        <p class="ayuda" id="ayudaPeajes"></p>
-        <div class="tabla-envoltorio"><table class="datos" id="tablaPlazas"></table></div>
-      </div>
-
-      <div class="tarjeta">
-        <h2>Peaje por localidad, desglosado</h2>
-        <p class="ayuda">
-          El total de cada destino es la suma de las plazas que se cruzan. Por eso es
-          desglosable línea por línea. Las secuencias marcadas ESTIMADO requieren verificación con la ruta y cartola real.
-        </p>
+      <details class="tarjeta">
+        <summary><b>Por dónde se pasa y cuánto se paga de peaje</b></summary>
+        <p class="ayuda" id="ayudaPeajes" style="margin-top:10px"></p>
         <div id="desglosePeajes"></div>
-      </div>
+        <details style="margin-top:14px">
+          <summary>Ver el catálogo completo de plazas y pórticos</summary>
+          <div class="tabla-envoltorio" style="margin-top:10px">
+            <table class="datos" id="tablaPlazas"></table>
+          </div>
+        </details>
+      </details>
+
+      <details class="tarjeta">
+        <summary><b>Por qué se va por autopista o por fuera en cada tramo</b></summary>
+        <div class="tabla-envoltorio" style="margin-top:12px">
+          <table class="datos" id="tablaRutas"></table>
+        </div>
+      </details>
     </div>
 
-    <!-- ---------- ORDEN DE SERVICIO ---------- -->
-    <div class="vista" id="vista-orden">
-      <div class="tarjeta">
-        <div class="fila-form">
-          <div class="campo">
-            <label>Tecnico</label>
-            <select id="selectorOrden" onchange="cargarOrden()"></select>
-          </div>
-          <button class="btn" onclick="exportarPdf()">Exportar a PDF en Drive</button>
+    <!-- ============================================================
+         4 · EL EQUIPO
+         ============================================================ -->
+    <div class="vista" id="vista-equipo">
+
+      <div class="intro-vista">
+        <div>
+          <div class="sobretitulo">PANTALLA 4 DE 5</div>
+          <h2>El equipo</h2>
+          <p>Cuánto trabaja cada persona y qué tiene que hacer. Aquí se imprime la hoja de
+             ruta que se le entrega a cada técnico.</p>
         </div>
       </div>
-      <div id="contenidoOrden"></div>
-      <div class="tarjeta"><h2>Órdenes de la agenda para este técnico</h2><div id="agendaTecnicoOrden"></div></div>
+
+      <div class="tarjeta destacada">
+        <h2>Hoja de ruta para entregar</h2>
+        <p class="ayuda">Elige un técnico y aparece todo lo suyo: dónde va cada día, con qué
+           vehículo, dónde duerme, cuánta plata recibe y qué herramientas llevar.</p>
+        <div class="fila-form">
+          <div class="campo">
+            <label for="selectorOrden">Técnico</label>
+            <select id="selectorOrden" onchange="cargarOrden()"></select>
+          </div>
+          <button class="btn" onclick="exportarPdf()">Descargar en PDF</button>
+        </div>
+        <div id="contenidoOrden" style="margin-top:16px"></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Carga de trabajo</h2>
+        <p class="ayuda">Haz clic en un encabezado para ordenar la tabla.</p>
+        <div class="tabla-envoltorio"><table class="datos" id="tablaTecnicos"></table></div>
+      </div>
+
+      <div class="rejilla rejilla-2">
+        <div class="tarjeta">
+          <h2>Trabajo real contra tiempo en la carretera</h2>
+          <div id="graficoHoras" class="grafico"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Ficha individual</h2>
+          <p class="ayuda">Sirve para responder con datos cuando alguien pide aumento o
+             reclama que está sobrecargado.</p>
+          <div class="fila-form" style="margin-bottom:14px">
+            <div class="campo">
+              <label for="selectorFicha">Técnico</label>
+              <select id="selectorFicha" onchange="dibujarFicha()"></select>
+            </div>
+          </div>
+          <div id="ficha"></div>
+        </div>
+      </div>
+
+      <div class="rejilla rejilla-2">
+        <div class="tarjeta">
+          <h2>Órdenes agendadas de este técnico</h2>
+          <div id="agendaTecnicoOrden"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Trabajos realizados</h2>
+          <div id="resumenAgenda">Abre la pantalla 2 para cargar las órdenes guardadas.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         5 · AJUSTES Y AYUDA
+         ============================================================ -->
+    <div class="vista" id="vista-ajustes">
+
+      <div class="intro-vista">
+        <div>
+          <div class="sobretitulo">PANTALLA 5 DE 5</div>
+          <h2>Ajustes y ayuda</h2>
+          <p>Todo lo que se puede cambiar del sistema, más el manual completo con el
+             glosario y las fórmulas.</p>
+        </div>
+      </div>
+
+      <div id="estadoEditor" role="status"></div>
+
+      <div class="tarjeta">
+        <h2>Cambiar un valor del sistema</h2>
+        <p class="ayuda">Precio del diésel, valor del hotel, jornada, tarifas de taxi. Los datos
+           que vienen del enunciado aparecen bloqueados a propósito: ésos no se negocian.
+           <b>Después de guardar hay que apretar Recalcular</b> arriba a la derecha.</p>
+        <input type="search" id="buscarConfig" aria-label="Buscar parámetro"
+               placeholder="Buscar: diésel, hotel, jornada, viático…" oninput="filtrarConfig()">
+        <div id="editorConfig"></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Direcciones, hotel y material de capacitación</h2>
+        <p class="ayuda">El sistema no hace reservas ni manda correos: sólo guarda el dato.</p>
+        <form id="formDestino" onsubmit="event.preventDefault(); guardarDestinoWeb()">
+          <div class="fila-form">
+            <div class="campo">
+              <label for="editLocalidad">Localidad</label>
+              <select id="editLocalidad" onchange="seleccionarDestino()"></select>
+            </div>
+            <div class="campo">
+              <label for="editDireccion">Dirección exacta</label>
+              <input id="editDireccion" required maxlength="500">
+            </div>
+          </div>
+          <div class="fila-form" style="margin-top:16px">
+            <div class="campo">
+              <label for="editHotel">Hotel propuesto</label>
+              <input id="editHotel" maxlength="500">
+            </div>
+            <div class="campo">
+              <label for="editEnlace">Material de capacitación (https)</label>
+              <input id="editEnlace" type="url" placeholder="https://drive.google.com/…">
+            </div>
+            <button class="btn" type="submit">Guardar</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Editar el plan viaje por viaje</h2>
+        <p class="ayuda">Cada fila es un traslado más el trabajo al llegar. Borrar una fila sólo
+           cambia el borrador hasta que guardas.</p>
+        <div class="acciones-editor">
+          <button class="btn btn-secundario" onclick="agregarTramo()">Agregar viaje</button>
+          <button class="btn" onclick="guardarTramos()">Guardar el plan</button>
+        </div>
+        <div class="tabla-envoltorio"><table class="datos editor-plan" id="editorPlan"></table></div>
+      </div>
+
+      <div class="tarjeta" id="tarjetaParametros">
+        <h2>Si algo dejó de funcionar</h2>
+        <p class="ayuda">Cuando el sistema incorpora funciones nuevas, la planilla puede quedarse
+           sin los parámetros que necesitan. Este botón agrega <b>sólo lo que falta</b>.
+           No borra nada de lo que ya configuraste.</p>
+        <div id="estadoParametros" role="status" class="chico">Revisando…</div>
+        <div class="acciones-editor" style="margin-top:12px">
+          <button class="btn" id="btnSincronizar" onclick="sincronizarParametros()">
+            Reparar la configuración</button>
+          <button class="btn btn-secundario" onclick="recalcular()">Recalcular todo</button>
+        </div>
+      </div>
+
+      <div class="tarjeta conexion-maps">
+        <div>
+          <h2>Conexión con Google Maps</h2>
+          <p id="estadoMaps" role="status">Revisa la conexión y actualiza las rutas cuando
+             lo necesites.</p>
+        </div>
+        <div class="acciones-editor">
+          <button class="btn btn-secundario" id="btnDiagnosticoMaps" onclick="probarMapsWeb()">
+            Probar conexión</button>
+          <button class="btn" id="btnActualizarMaps" onclick="actualizarLoteMaps()">
+            Actualizar rutas</button>
+        </div>
+        <details>
+          <summary>Cómo conectar Google Maps</summary>
+          <p>Sin clave se usa el servicio nativo de Apps Script. Con clave propia: habilite
+             Routes API y facturación en Google Cloud, y en Propiedades del script defina
+             MAPS_PROVEEDOR = ROUTES_API y GOOGLE_MAPS_API_KEY. No ponga la clave en este
+             formulario.</p>
+        </details>
+      </div>
+
+      <details class="tarjeta">
+        <summary style="color:#d32f2f"><b>Reconstruir la planilla desde cero</b></summary>
+        <p class="ayuda" style="color:#d32f2f;margin-top:10px">Esto <b>borra</b> la configuración
+           y el plan actuales y los reemplaza por los datos de referencia. Úsalo sólo si algo
+           se rompió de verdad. Antes prueba "Reparar la configuración" de arriba.</p>
+        <div class="acciones-editor">
+          <button class="btn btn-acento" style="background:#d32f2f;border-color:#b71c1c"
+                  onclick="confirmarRestauracion()">Reconstruir y perder los datos</button>
+        </div>
+      </details>
+
+      <!-- MANUAL COMPLETO -->
+      <div class="intro-vista" style="margin-top:30px">
+        <div>
+          <div class="sobretitulo">MANUAL</div>
+          <h2>Cómo funciona todo esto</h2>
+          <p>Las fórmulas, el glosario y de dónde sale cada número. Para preparar la
+             presentación y el informe.</p>
+        </div>
+      </div>
+      <div id="manualCompleto"></div>
     </div>
 
   </div>

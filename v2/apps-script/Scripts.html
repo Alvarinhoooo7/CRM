@@ -8,7 +8,7 @@ var TOKEN = '';
 var DATOS = null;
 var SECUENCIA_TABLERO = 0;
 var GRAFICOS_LISTOS = false;
-var VISTA_INICIAL = document.body.dataset.vista || 'resumen';
+var VISTA_INICIAL = document.body.dataset.vista || 'hoy';
 var TECNICO_INICIAL = document.body.dataset.tecnico || '';
 
 if (window.google && google.charts) {
@@ -189,8 +189,8 @@ function cargarTablero(forzar, escenario) {
       mostrarCargando(false);
       dibujarTodo();
       cargarAgenda();
-      if (document.getElementById('vista-orden').classList.contains('activa')) cargarOrden();
-      if (VISTA_INICIAL && VISTA_INICIAL !== 'resumen') {
+      if (document.getElementById('vista-equipo').classList.contains('activa')) cargarOrden();
+      if (VISTA_INICIAL && VISTA_INICIAL !== 'hoy') {
         mostrar(VISTA_INICIAL);
         VISTA_INICIAL = '';
       }
@@ -259,13 +259,22 @@ function arreglarParametros() {
 }
 
 function mostrar(vista) {
-  if (!document.getElementById('vista-' + vista)) vista = 'resumen';
+  // Las direcciones antiguas siguen funcionando: se redirigen a la pantalla
+  // nueva que absorbio esa seccion.
+  var EQUIVALENCIAS = {
+    resumen: 'hoy', operacion: 'hoy',
+    calendario: 'agenda',
+    gastos: 'dinero', transporte: 'dinero', peajes: 'dinero',
+    tecnicos: 'equipo', orden: 'equipo',
+    gestion: 'ajustes', configuracion: 'ajustes', guia: 'ajustes'
+  };
+  if (EQUIVALENCIAS[vista]) vista = EQUIVALENCIAS[vista];
+  if (!document.getElementById('vista-' + vista)) vista = 'hoy';
 
   // Cada vista explica sola que es y como leerla, para quien la abre
   // por primera vez. Vive en Ayuda.html.
   inyectarAyuda(vista);
-  if (vista === 'guia') dibujarManual();
-  if (vista === 'configuracion') revisarParametros();
+  if (vista === 'ajustes') { dibujarManual(); revisarParametros(); cargarEditor(); }
   document.querySelectorAll('.vista').forEach(function (v) { v.classList.remove('activa'); });
   document.querySelectorAll('.pestana').forEach(function (p) { p.classList.remove('activa'); });
   var destino = document.getElementById('vista-' + vista);
@@ -275,7 +284,8 @@ function mostrar(vista) {
 
   // Google Charts necesita que el contenedor sea visible para medir.
   if (DATOS && GRAFICOS_LISTOS) setTimeout(dibujarGraficos, 30);
-  if (vista === 'orden' && DATOS) cargarOrden();
+  if (vista === 'equipo' && DATOS) cargarOrden();
+  if (vista === 'agenda' && DATOS) llenarAsistente();
   if (vista === 'gestion' && DATOS) cargarEditor();
   if (vista === 'calendario') cargarAgenda();
   if (vista === 'peajes' && !document.getElementById('tablaPlazas').innerHTML) {
@@ -1001,6 +1011,211 @@ function dibujarCircuitos() {
       (ahorroTotal > 0 ? 'se ahorran ' + pesos(ahorroTotal) + '.'
                        : 'no hay diferencia a favor de agrupar.') +
       '</div>' + tarjetas;
+}
+
+/* ==========================================================================
+   ASISTENTE DE ORDEN
+   Responde la pregunta con la que parte cualquier coordinador: me llamaron
+   de Copiapo por 5 equipos, cuanto me sale y a quien mando.
+   ========================================================================== */
+
+var ASISTENTE_ULTIMO = null;
+var ASISTENTE_TEMPORIZADOR = null;
+
+/** Llena el selector de destinos la primera vez que se abre la pantalla. */
+function llenarAsistente() {
+  var sel = document.getElementById('asisLocalidad');
+  if (!sel || sel.options.length) return;
+
+  google.script.run
+    .withSuccessHandler(function (lista) {
+      sel.innerHTML = lista.map(function (d) {
+        return '<option value="' + escapar(d.localidad) + '" data-equipos="' + d.equipos +
+               '">' + escapar(d.localidad) + ' · ' + escapar(d.region) + '</option>';
+      }).join('');
+
+      // Al cambiar el destino se precarga la cantidad de equipos pendientes.
+      sel.addEventListener('change', function () {
+        var op = sel.options[sel.selectedIndex];
+        var eq = Number(op.getAttribute('data-equipos')) || 1;
+        document.getElementById('asisEquipos').value = eq;
+      });
+
+      if (lista.length) {
+        document.getElementById('asisEquipos').value = lista[0].equipos || 1;
+        consultarAsistente();
+      }
+    })
+    .withFailureHandler(function (e) {
+      document.getElementById('asistenteResultado').innerHTML =
+        '<div class="alerta error">' + escapar(e.message) + '</div>';
+    })
+    .listarDestinos(TOKEN);
+}
+
+/** Consulta al servidor con un pequeno retardo, para no disparar en cada tecla. */
+function consultarAsistente() {
+  clearTimeout(ASISTENTE_TEMPORIZADOR);
+  ASISTENTE_TEMPORIZADOR = setTimeout(ejecutarAsistente, 350);
+}
+
+function ejecutarAsistente() {
+  var localidad = document.getElementById('asisLocalidad').value;
+  var equipos = Number(document.getElementById('asisEquipos').value);
+  var caja = document.getElementById('asistenteResultado');
+  if (!localidad || !(equipos > 0)) return;
+
+  caja.innerHTML = '<div class="cargando" style="padding:24px">' +
+    '<div class="girador"></div>Calculando las alternativas…</div>';
+
+  google.script.run
+    .withSuccessHandler(function (r) {
+      if (!r.ok) {
+        caja.innerHTML = '<div class="alerta error">' + escapar(r.mensaje) + '</div>';
+        return;
+      }
+      ASISTENTE_ULTIMO = r;
+      caja.innerHTML = dibujarAsistente(r);
+    })
+    .withFailureHandler(function (e) {
+      caja.innerHTML = '<div class="alerta error">' + escapar(e.message) + '</div>';
+    })
+    .asistenteOrden(TOKEN, { localidad: localidad, equipos: equipos });
+}
+
+/** Pinta el resultado: el titular, las alternativas y el porque. */
+function dibujarAsistente(r) {
+  var rec = r.recomendacion;
+  var elegida = rec && rec.elegida;
+  if (!elegida) {
+    return '<div class="alerta aviso">' + escapar(r.titular) + '</div>';
+  }
+
+  // Una tarjeta por alternativa, ordenadas de la mas barata a la mas cara.
+  var tarjetas = r.opciones.slice()
+    .sort(function (a, b) { return a.total - b.total; })
+    .map(function (o) {
+      var esRecomendada = (o.modo === elegida.modo && o.dotacion === elegida.dotacion);
+      var vehiculos = (o.modo === 'Camioneta')
+        ? Math.ceil(o.dotacion / r.parametros.capacidadCamioneta) : 0;
+
+      return '<div class="opcion-modo' + (esRecomendada ? ' recomendada' : '') +
+        (o.aplicable ? '' : ' no-aplica') + '">' +
+        (esRecomendada ? '<div class="cinta">RECOMENDADA</div>' : '') +
+        '<div class="opcion-titulo">' + escapar(o.modo) + '</div>' +
+        '<div class="opcion-monto">' + pesos(o.total) + '</div>' +
+        '<div class="opcion-linea"><b>' + o.dotacion + '</b> técnico' +
+          (o.dotacion > 1 ? 's' : '') +
+          (vehiculos ? ' · <b>' + vehiculos + '</b> camioneta' + (vehiculos > 1 ? 's' : '') : '') +
+        '</div>' +
+        '<div class="opcion-linea">' + o.dias + ' día' + (o.dias > 1 ? 's' : '') +
+          (o.noches ? ' · ' + o.noches + ' noche' + (o.noches > 1 ? 's' : '') + ' de hotel'
+                    : ' · sin pernoctar') + '</div>' +
+        '<div class="opcion-linea chico">' + numero(o.horasTotales, 1) + ' h en total' +
+          (o.horasExtra ? ' · ' + numero(o.horasExtra, 1) + ' h extra' : '') + '</div>' +
+        (o.riesgos && o.riesgos.length
+          ? '<div class="opcion-riesgos">' + o.riesgos.map(function (x) {
+              return '<span class="pastilla ' +
+                (x.gravedad === 'alta' ? 'fuera' : 'tolerancia') + '">' +
+                x.tipo.replace(/_/g, ' ').toLowerCase() + '</span>'; }).join(' ') + '</div>'
+          : '<div class="opcion-riesgos"><span class="pastilla ok">sin riesgos</span></div>') +
+        (o.aplicable ? '' : '<div class="chico">' + escapar(o.nota) + '</div>') +
+        '</div>';
+    }).join('');
+
+  // Desglose de la recomendada, para que nadie tenga que creer en el total.
+  var desglose = [
+    ['Transporte', elegida.transporte],
+    ['Hotel', elegida.hotel],
+    ['Viáticos', elegida.viatico],
+    ['Colación', elegida.colacion],
+    ['Horas extra', elegida.sobretiempo]
+  ].filter(function (x) { return x[1] > 0; })
+   .map(function (x) {
+     return '<div class="desglose-fila"><span class="concepto">' + x[0] + '</span>' +
+            '<span class="valor">' + pesos(x[1]) + '</span></div>';
+   }).join('');
+
+  return '<div class="titular-asistente">' + escapar(r.titular) + '</div>' +
+
+    '<div class="rejilla rejilla-4" style="margin-bottom:18px">' + tarjetas + '</div>' +
+
+    '<div class="alerta ' + (rec.sobrecosto > 0 ? 'aviso' : 'bien') + '">' +
+      '<span class="id">POR QUÉ ÉSTA Y NO LA MÁS BARATA</span>' +
+      humanizar(escapar(rec.texto)) + '</div>' +
+
+    '<div class="rejilla rejilla-2" style="margin-top:16px">' +
+      '<div><h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;' +
+        'color:var(--tenue);margin:0 0 8px">De dónde sale el monto</h3>' +
+        '<div class="desglose">' + desglose +
+        '<div class="desglose-total"><span>Total de la orden</span><span>' +
+        pesos(elegida.total) + '</span></div></div></div>' +
+      '<div><h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;' +
+        'color:var(--tenue);margin:0 0 8px">Datos del destino</h3>' +
+        '<div class="desglose">' +
+        '<div class="desglose-fila"><span class="concepto">Dirección</span>' +
+          '<span class="valor" style="font-weight:400;text-align:right">' +
+          escapar(r.direccion || 'sin cargar') + '</span></div>' +
+        '<div class="desglose-fila"><span class="concepto">Región</span>' +
+          '<span class="valor" style="font-weight:400">' + escapar(r.region) + '</span></div>' +
+        '<div class="desglose-fila"><span class="concepto">¿Paga viático?</span>' +
+          '<span class="valor" style="font-weight:400">' +
+          (r.enRM ? 'No, es RM: sólo colación' : 'Sí, está fuera de la RM') + '</span></div>' +
+        (r.hotelReferencia
+          ? '<div class="desglose-fila"><span class="concepto">Hotel de referencia</span>' +
+            '<span class="valor" style="font-weight:400;text-align:right">' +
+            escapar(r.hotelReferencia) + '</span></div>' : '') +
+        '</div></div>' +
+    '</div>' +
+
+    '<div class="acciones-editor" style="margin-top:18px">' +
+      '<button class="btn" onclick="usarRecomendacion()">Usar esta opción y llenar el formulario</button>' +
+      '<span class="chico">Rellena abajo el destino, los equipos y la cuadrilla sugerida.</span>' +
+    '</div>';
+}
+
+/** Traslada la recomendacion al formulario de la orden. */
+function usarRecomendacion() {
+  var r = ASISTENTE_ULTIMO;
+  if (!r || !r.recomendacion || !r.recomendacion.elegida) return;
+  var e = r.recomendacion.elegida;
+
+  var poner = function (id, valor) {
+    var el = document.getElementById(id);
+    if (el && valor !== undefined && valor !== null) el.value = valor;
+  };
+
+  poner('agendaCliente', r.localidad);
+  poner('agendaDireccion', r.direccion);
+  poner('agendaEquipos', r.equipos);
+  poner('agendaDias', e.dias);
+  poner('agendaHotel', e.noches ? (r.hotelReferencia || '') : '');
+
+  // Se marcan los primeros tecnicos disponibles segun la dotacion sugerida.
+  var casillas = document.querySelectorAll('input[name="agendaTecnico"]');
+  var marcados = 0;
+  casillas.forEach(function (c) {
+    c.checked = marcados < e.dotacion;
+    if (c.checked) marcados++;
+  });
+
+  // Vehiculo solo si la recomendacion es camioneta.
+  var selVehiculo = document.getElementById('agendaVehiculo');
+  if (selVehiculo) {
+    if (e.modo !== 'Camioneta') selVehiculo.value = '';
+    else if (selVehiculo.options.length > 1) selVehiculo.selectedIndex = 1;
+  }
+
+  if (typeof invalidarPreviaAgenda === 'function') invalidarPreviaAgenda();
+
+  var destino = document.getElementById('formularioAgenda');
+  if (destino) destino.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (typeof mensajeAgenda === 'function') {
+    mensajeAgenda('Formulario rellenado con la opción recomendada: ' + e.modo.toLowerCase() +
+                  ' con ' + e.dotacion + ' técnico(s). Revisa la fecha y los técnicos, y ' +
+                  'después aprieta "Calcular costos logísticos".');
+  }
 }
 
 function dibujarRutas() {

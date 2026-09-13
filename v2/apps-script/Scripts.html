@@ -21,22 +21,78 @@ if (window.google && google.charts) {
    ========================================================================== */
 
 
+/* --------------------------------------------------------------------------
+   NOMBRES LEGIBLES
+   Nadie que abra esta web por primera vez sabe que es D1, V3 o C2. Todo lo
+   que se muestra en pantalla pasa por aqui y sale con nombre completo.
+   -------------------------------------------------------------------------- */
+
+/** T01 -> "Pepe Videla". Si no esta en la nomina, devuelve el codigo. */
 function nomT(cod) {
-  if (!DATOS || !DATOS.tecnicos || !cod) return cod;
-  var t = DATOS.tecnicos.filter(function(x) { return x.codigo === cod; })[0];
+  if (!DATOS || !DATOS.tecnicos || !cod) return cod || '';
+  var t = DATOS.tecnicos.filter(function (x) { return x.codigo === cod; })[0];
   return t ? t.nombre : cod;
 }
-function nomC(cod) {
-  if (!DATOS || !DATOS.flota || !cod) return cod;
-  var f = DATOS.flota.filter(function(x) { return x.codigo === cod; })[0];
-  return f ? f.nombre : cod;
+
+/** T01 -> "Pepe Videla (T01)". Para tablas donde el codigo todavia sirve. */
+function nomTC(cod) {
+  if (!cod) return '';
+  var nombre = nomT(cod);
+  return (nombre === cod) ? cod : nombre + ' (' + cod + ')';
 }
+
+/** V3 -> "Vehículo 3", agregando el modelo si esta cargado. */
+function nomV(cod) {
+  if (!cod || cod === '—') return '—';
+  var numero = String(cod).replace(/\D/g, '');
+  var etiqueta = 'Vehículo ' + (numero || cod);
+  if (DATOS && DATOS.flota) {
+    var v = DATOS.flota.filter(function (x) { return x.codigo === cod; })[0];
+    if (v && v.patente) etiqueta += ' · ' + v.patente;
+  }
+  return etiqueta;
+}
+
+/** Alias historico: en el codigo viejo nomC se usaba para el vehiculo. */
+function nomC(cod) { return nomV(cod); }
+
+/** C2 -> "Cuadrilla 2". */
+function nomCu(cod) {
+  if (!cod) return '';
+  var numero = String(cod).replace(/\D/g, '');
+  return numero ? 'Cuadrilla ' + numero : cod;
+}
+
+/** D1 -> "Día 1". */
 function fmtD(d) {
-  return d ? d.replace('D', 'Día ') : '';
+  if (!d) return '';
+  var numero = String(d).replace(/\D/g, '');
+  return numero ? 'Día ' + numero : d;
 }
+
+/** "T01,T02" -> "Pepe Videla, Pepa Videla". */
 function fmtC(txt) {
   if (!txt) return '';
-  return txt.split(',').map(function(c) { return nomT(c.trim()); }).join(', ');
+  if (Object.prototype.toString.call(txt) === '[object Array]') {
+    return txt.map(function (c) { return nomT(String(c).trim()); }).join(', ');
+  }
+  return String(txt).split(',').map(function (c) {
+    return nomT(c.trim()); }).join(', ');
+}
+
+/**
+ * Traduce los codigos que vienen en los mensajes del servidor.
+ * Las alertas se escriben con C1, D4 y T07 porque asi estan en la planilla,
+ * pero quien lee la pantalla necesita "Cuadrilla 1", "Día 4" y el nombre.
+ */
+function humanizar(texto) {
+  if (!texto) return '';
+  return String(texto)
+    // Los limites de palabra evitan romper textos como RUTA_5S o IVA12.
+    .replace(/\bT(\d{2,3})\b/g, function (cod) { return nomT(cod); })
+    .replace(/\bC(\d+)\b/g, function (cod, n) { return 'Cuadrilla ' + n; })
+    .replace(/\bD(\d+)\b/g, function (cod, n) { return 'Día ' + n; })
+    .replace(/\bV(\d+)\b/g, function (cod, n) { return 'Vehículo ' + n; });
 }
 
 function pesos(n) {
@@ -304,7 +360,7 @@ function dibujarAlertas(alertas) {
 
   caja.innerHTML = errores.concat(avisos).map(function (a) {
     return '<div class="alerta ' + (a.nivel === 'error' ? 'error' : 'aviso') + '">' +
-      '<span class="id">' + a.id + '</span>' + escapar(a.mensaje) + '</div>';
+      '<span class="id">' + a.id + '</span>' + humanizar(escapar(a.mensaje)) + '</div>';
   }).join('');
 }
 
@@ -443,7 +499,8 @@ function dibujarTransferencias(trs) {
     '<th class="num">Peajes</th><th class="num">Imprevistos</th>' +
     '<th class="num">A transferir</th></tr>' +
     trs.map(function (t) {
-      return '<tr><td><b>' + t.tecnico + '</b> ' + escapar(t.nombre) + '</td>' +
+      return '<tr><td><b>' + escapar(t.nombre) + '</b>'
+        + '<br><span class="chico">' + t.tecnico + '</span></td>' +
         '<td class="c">' + t.dias + '</td><td class="c">' + t.noches + '</td>' +
         '<td class="num">' + pesos(t.viatico) + '</td>' +
         '<td class="num">' + pesos(t.hotel) + '</td>' +
@@ -487,7 +544,7 @@ function dibujarTecnicos(lista) {
     datos.map(function (t) {
       var pct = Math.min(100, (t.utilizacion || 0) * 100);
       var clase = pct > 95 ? 'alta' : (pct > 75 ? 'media' : 'baja');
-      return '<tr><td><b>' + t.tecnico + '</b></td><td>' + escapar(t.nombre) +
+      return '<tr><td class="chico">' + t.tecnico + '</td><td><b>' + escapar(t.nombre) + '</b>' +
         (t.licencia === 'No' ? ' <span class="pastilla neutra">sin licencia</span>' : '') +
         '</td>' +
         '<td class="num">' + numero(t.horas, 1) + '</td>' +
@@ -592,7 +649,8 @@ function dibujarMatrices() {
       var totalMostrado = (modo === 'libres')
         ? totalLibre : total;
 
-      return '<tr><td class="nombre">' + tec.codigo + ' ' + escapar(tec.nombre) + '</td>' +
+      return '<tr><td class="nombre">' + escapar(tec.nombre) +
+        '<br><span class="chico">' + tec.codigo + '</span></td>' +
         celdas + '<td><b>' + numero(totalMostrado, 1) + '</b></td></tr>';
     }).join('');
   };
@@ -811,7 +869,7 @@ function dibujarRutas() {
     .filter(function (t) { return t.comparacionRuta; })
     .map(function (t) {
       var c = t.comparacionRuta;
-      return '<tr><td>' + fmtD(t.dia) + '<br><span class="chico">' + fmtC(t.cuadrilla) + '</span></td>' +
+      return '<tr><td>' + fmtD(t.dia) + '<br><span class="chico">' + nomCu(t.cuadrilla) + '</span></td>' +
         '<td><b>' + escapar(t.desde) + ' → ' + escapar(t.hasta) + '</b></td>' +
         '<td class="num">' + numero(t.km, 1) + ' km</td>' +
         '<td class="num">' + numero(t.horasViaje, 2) + ' h</td>' +
@@ -901,7 +959,7 @@ function cargarOrden() {
       var tramos = o.tramos.map(function (t) {
         var fecha = t.fecha ? new Date(t.fecha).toLocaleDateString('es-CL') : '';
         return '<tr><td>' + fmtD(t.dia) + '<br><span class="chico">' + fecha + '</span></td>' +
-          '<td>' + fmtC(t.cuadrilla) + '<br><span class="chico">' + nomC(t.vehiculo) +
+          '<td>' + nomCu(t.cuadrilla) + '<br><span class="chico">' + nomV(t.vehiculo) +
             (t.conduce ? ' · CONDUCE' : '') + '</span></td>' +
           '<td><b>' + escapar(t.desde) + ' → ' + escapar(t.hasta) + '</b>' +
             '<br><span class="chico">' + escapar(t.direccion) + '</span></td>' +
@@ -914,7 +972,8 @@ function cargarOrden() {
 
       caja.innerHTML =
         '<div class="tarjeta">' +
-          '<h2>' + o.tecnico.codigo + ' · ' + escapar(o.tecnico.nombre) + '</h2>' +
+          '<h2>' + escapar(o.tecnico.nombre) + '</h2>' +
+          '<p class="ayuda" style="margin-top:-6px">Técnico ' + o.tecnico.codigo + '</p>' +
           '<p class="ayuda">Licencia de conducir: <b>' + o.tecnico.licencia + '</b></p>' +
           '<div class="rejilla rejilla-4">' +
             '<div class="kpi"><div class="etiqueta">Monto a transferir</div>' +
@@ -990,7 +1049,7 @@ function llenarSelectores() {
   };
 
   var tecnicos = DATOS.tecnicos.map(function (t) {
-    return { codigo: t.codigo, etiqueta: t.codigo + ' · ' + t.nombre };
+    return { codigo: t.codigo, etiqueta: t.nombre + ' · ' + t.codigo };
   });
   llenar('selectorFicha', tecnicos, 'codigo', 'etiqueta');
   llenar('selectorOrden', tecnicos, 'codigo', 'etiqueta', TECNICO_INICIAL);
@@ -1078,7 +1137,7 @@ function dibujarGraficos() {
   pintar('graficoHoras', 'BarChart',
     [['Tecnico', 'En sitio', 'En traslado']].concat(
       R.porTecnico.map(function (t) {
-        return [t.tecnico, t.horasEnSitio, t.horasViaje]; })),
+        return [nomT(t.tecnico), t.horasEnSitio, t.horasViaje]; })),
     opciones({ isStacked: true, legend: { position: 'top' },
                colors: ['#2E7D32', '#E8A33D'] }));
 }

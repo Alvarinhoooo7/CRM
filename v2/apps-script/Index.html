@@ -159,7 +159,14 @@
       <div class="tarjeta asistente">
         <h2>Paso 1 · ¿A dónde y cuántos equipos?</h2>
         <p class="ayuda">Con esos dos datos basta. No hace falta saber tarifas ni kilómetros.</p>
-        <div class="fila-form">
+        <div class="selector-alcance">
+          <label><input type="radio" name="alcanceAsis" value="caso" checked
+                        onchange="cambiarAlcance()"> Destinos del caso <span class="chico">(16)</span></label>
+          <label><input type="radio" name="alcanceAsis" value="pais"
+                        onchange="cambiarAlcance()"> Cualquier comuna de Chile <span class="chico">(346)</span></label>
+        </div>
+
+        <div class="fila-form" id="filaCaso">
           <div class="campo">
             <label for="asisLocalidad">Destino</label>
             <select id="asisLocalidad" onchange="consultarAsistente()"></select>
@@ -170,6 +177,23 @@
                    onchange="consultarAsistente()" oninput="consultarAsistente()">
           </div>
           <button class="btn" onclick="consultarAsistente()">Calcular</button>
+        </div>
+
+        <div class="fila-form oculto" id="filaPais">
+          <div class="campo">
+            <label for="asisRegion">Región</label>
+            <select id="asisRegion" onchange="llenarComunasRegion()"></select>
+          </div>
+          <div class="campo">
+            <label for="asisComuna">Comuna</label>
+            <select id="asisComuna" onchange="consultarComuna()"></select>
+          </div>
+          <div class="campo">
+            <label for="asisEquiposPais">Equipos a instalar</label>
+            <input type="number" id="asisEquiposPais" min="1" max="99" value="1"
+                   onchange="consultarComuna()">
+          </div>
+          <button class="btn" onclick="consultarComuna()">Calcular</button>
         </div>
         <div id="asistenteResultado" style="margin-top:18px"></div>
       </div>

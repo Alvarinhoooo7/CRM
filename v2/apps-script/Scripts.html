@@ -1218,6 +1218,104 @@ function usarRecomendacion() {
   }
 }
 
+
+/* --------------------------------------------------------------------------
+   CUALQUIER COMUNA DE CHILE
+   El caso trae 16 destinos, pero el servicio atiende todo el pais. Estas
+   funciones dejan cotizar cualquiera de las 346 comunas: se elige region,
+   despues comuna, y el sistema resuelve la direccion de la municipalidad y le
+   pregunta a Maps. Solo se consulta la comuna elegida, no las 346.
+   -------------------------------------------------------------------------- */
+
+var COMUNAS_CARGADAS = null;
+
+/** Alterna entre los 16 destinos del caso y las 346 comunas del pais. */
+function cambiarAlcance() {
+  var pais = document.querySelector('input[name="alcanceAsis"]:checked').value === 'pais';
+  document.getElementById('filaCaso').classList.toggle('oculto', pais);
+  document.getElementById('filaPais').classList.toggle('oculto', !pais);
+  document.getElementById('asistenteResultado').innerHTML = '';
+  if (pais) cargarComunas();
+  else consultarAsistente();
+}
+
+/** Trae el catalogo una sola vez y llena el selector de regiones. */
+function cargarComunas() {
+  if (COMUNAS_CARGADAS) { llenarComunasRegion(); return; }
+
+  var sel = document.getElementById('asisRegion');
+  sel.innerHTML = '<option>Cargando…</option>';
+
+  google.script.run
+    .withSuccessHandler(function (r) {
+      COMUNAS_CARGADAS = r;
+      sel.innerHTML = r.regiones.map(function (x) {
+        return '<option value="' + escapar(x.region) + '">' + escapar(x.region) +
+               ' (' + x.comunas.length + ')</option>';
+      }).join('');
+      if (r.aviso) {
+        document.getElementById('asistenteResultado').innerHTML =
+          '<div class="alerta aviso">' + escapar(r.aviso) + '</div>';
+      }
+      llenarComunasRegion();
+    })
+    .withFailureHandler(function (e) {
+      sel.innerHTML = '';
+      document.getElementById('asistenteResultado').innerHTML =
+        '<div class="alerta error">' + escapar(e.message) + '</div>';
+    })
+    .listarComunasWeb(TOKEN);
+}
+
+/** Llena el selector de comunas segun la region elegida. */
+function llenarComunasRegion() {
+  if (!COMUNAS_CARGADAS) return;
+  var region = document.getElementById('asisRegion').value;
+  var grupo = COMUNAS_CARGADAS.regiones.filter(function (x) {
+    return x.region === region; })[0];
+  if (!grupo) return;
+
+  var sel = document.getElementById('asisComuna');
+  sel.innerHTML = grupo.comunas.slice().sort().map(function (c) {
+    return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>';
+  }).join('');
+}
+
+/** Cotiza la comuna elegida. */
+function consultarComuna() {
+  var region = document.getElementById('asisRegion').value;
+  var comuna = document.getElementById('asisComuna').value;
+  var equipos = Number(document.getElementById('asisEquiposPais').value);
+  var caja = document.getElementById('asistenteResultado');
+  if (!comuna || !(equipos > 0)) return;
+
+  caja.innerHTML = '<div class="cargando" style="padding:24px">' +
+    '<div class="girador"></div>Preguntándole a Google Maps por ' +
+    escapar(comuna) + '…</div>';
+
+  google.script.run
+    .withSuccessHandler(function (r) {
+      if (!r.ok) {
+        caja.innerHTML = '<div class="alerta aviso">' + escapar(r.mensaje) + '</div>';
+        return;
+      }
+      ASISTENTE_ULTIMO = r;
+      var avisos = (r.advertencias || []).length
+        ? '<div class="alerta aviso" style="margin-top:14px">' +
+          '<span class="id">LO QUE ESTE NUMERO NO INCLUYE</span>' +
+          r.advertencias.map(escapar).join('<br>') + '</div>'
+        : '';
+      var origen = r.origenDato
+        ? '<p class="chico" style="margin-bottom:12px">' + escapar(r.origenDato) + '</p>'
+        : '';
+      caja.innerHTML = origen + dibujarAsistente(r) + avisos;
+    })
+    .withFailureHandler(function (e) {
+      caja.innerHTML = '<div class="alerta error">' + escapar(e.message) + '</div>';
+    })
+    .cotizarComuna(TOKEN, { comuna: comuna, region: region, equipos: equipos });
+}
+
 function dibujarRutas() {
   var filas = DATOS.resultado.tramos
     .filter(function (t) { return t.comparacionRuta; })

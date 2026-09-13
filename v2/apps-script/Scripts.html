@@ -320,6 +320,7 @@ function dibujarTodo() {
   dibujarTecnicos(R.porTecnico);
   dibujarMatrices();
   dibujarModos();
+  dibujarCircuitos();
   dibujarRutas();
   llenarSelectores();
   dibujarGraficosBasicos();
@@ -803,7 +804,7 @@ function dibujarDetalleModo() {
       '</div>';
   }).join('');
 
-  caja.innerHTML =
+  caja.innerHTML = dibujarRecomendacion(c) +
     '<p class="ayuda">Viaje completo de ida y vuelta a <b>' + escapar(c.localidad) +
     '</b> para una cuadrilla de ' + c.tecnicos + ' técnicos que instala ' + c.equipos +
     ' equipo(s). Todos los totales incluyen hotel y viáticos, no solo el pasaje.</p>' +
@@ -862,6 +863,144 @@ function sincronizarParametros() {
       caja.innerHTML = '<span class="pastilla fuera">ERROR</span> ' + escapar(e.message);
     })
     .sincronizarParametrosWeb(TOKEN);
+}
+
+/**
+ * Dibuja la recomendacion explicada de un destino: que se eligio, cuanto
+ * cuesta, cual era la mas barata y por que no se tomo esa.
+ */
+function dibujarRecomendacion(c) {
+  var r = c.recomendacion;
+  if (!r || !r.elegida) return '';
+
+  var comparativa = c.opciones.slice()
+    .sort(function (a, b) { return a.total - b.total; })
+    .map(function (o) {
+      var esElegida = (o.modo === r.modo && o.dotacion === r.dotacion);
+      var dif = o.total - r.total;
+      return '<tr' + (esElegida ? ' style="background:#E6F4EA;font-weight:600"' : '') + '>' +
+        '<td>' + (esElegida ? '&#9654; ' : '') + escapar(o.modo) + '</td>' +
+        '<td class="c">' + o.dotacion + '</td>' +
+        '<td class="c">' + o.dias + 'd ' + o.noches + 'n</td>' +
+        '<td class="num">' + numero(o.horasTotales, 1) + ' h</td>' +
+        '<td class="num">' + (o.horasExtra ? numero(o.horasExtra, 2) + ' h' : '—') + '</td>' +
+        '<td class="num">' + pesos(o.total) + '</td>' +
+        '<td class="num">' + (esElegida ? '—' :
+          (dif > 0 ? '+' : '') + pesos(Math.abs(dif)).replace('$', dif > 0 ? '$' : '-$')) +
+        '</td>' +
+        '<td class="chico">' + (o.riesgos && o.riesgos.length
+          ? o.riesgos.map(function (x) {
+              return '<span class="pastilla ' +
+                (x.gravedad === 'alta' ? 'fuera' : 'tolerancia') + '">' +
+                x.tipo.replace(/_/g, ' ').toLowerCase() + '</span>'; }).join(' ')
+          : '<span class="pastilla ok">sin riesgos</span>') + '</td>' +
+        '</tr>';
+    }).join('');
+
+  return '<div class="tarjeta" style="border-left:4px solid var(--ok)">' +
+    '<h2>Por qué se eligió esta opción</h2>' +
+    '<div class="rejilla rejilla-3" style="margin-bottom:14px">' +
+      '<div class="kpi"><div class="etiqueta">Recomendado</div>' +
+        '<div class="valor">' + escapar(r.modo) + '</div>' +
+        '<div class="pie">' + r.dotacion + ' técnico(s) · ' + pesos(r.total) + '</div></div>' +
+      '<div class="kpi"><div class="etiqueta">La más barata era</div>' +
+        '<div class="valor" style="font-size:19px">' + escapar(r.masBarata.modo) + '</div>' +
+        '<div class="pie">' + r.masBarata.dotacion + ' técnico(s) · ' +
+        pesos(r.masBarata.total) + '</div></div>' +
+      '<div class="kpi"><div class="etiqueta">Sobrecosto que se paga</div>' +
+        '<div class="valor' + (r.sobrecosto > 0 ? ' acento' : '') + '">' +
+        (r.sobrecosto > 0 ? pesos(r.sobrecosto) : 'ninguno') + '</div>' +
+        '<div class="pie">' + (r.sobrecosto > 0 ? '+' + r.porcentajeSobrecosto + '%'
+          : 'es la más económica') + '</div></div>' +
+    '</div>' +
+    '<div class="alerta ' + (r.sobrecosto > 0 ? 'aviso' : 'bien') + '">' +
+      '<span class="id">EL RAZONAMIENTO</span>' + humanizar(escapar(r.texto)) + '</div>' +
+    '<div class="tabla-envoltorio" style="margin-top:14px"><table class="datos">' +
+      '<tr><th>Modo</th><th class="c">Téc</th><th class="c">Duración</th>' +
+      '<th class="num">Horas totales</th><th class="num">H. extra</th>' +
+      '<th class="num">Costo</th><th class="num">Diferencia</th>' +
+      '<th>Riesgos detectados</th></tr>' + comparativa + '</table></div>' +
+    '</div>';
+}
+
+/** Circuitos por corredor: agrupar contra ir por separado. */
+function dibujarCircuitos() {
+  var caja = document.getElementById('circuitos');
+  if (!caja) return;
+
+  var lista = (DATOS && DATOS.circuitos) || [];
+  if (!lista.length) {
+    caja.innerHTML = '<p class="chico">No hay corredores con dos o más localidades ' +
+      'pendientes, así que no hay circuitos que evaluar.</p>';
+    return;
+  }
+
+  var totalCircuito = 0, totalSeparado = 0;
+
+  var tarjetas = lista.map(function (c) {
+    var m = c.mejorCircuito;
+    if (!m) return '';
+    totalCircuito += c.conviene ? m.total : c.porSeparado;
+    totalSeparado += c.porSeparado;
+
+    var paradas = m.detalle.filter(function (t) { return t.hasta !== 'BASE'; })
+      .map(function (t) {
+        return '<tr><td>' + escapar(t.desde) + ' &rarr; <b>' + escapar(t.hasta) + '</b></td>' +
+          '<td class="num">' + numero(t.km, 1) + ' km</td>' +
+          '<td class="num">' + numero(t.horasViaje, 2) + ' h</td>' +
+          '<td class="num">' + pesos(t.peaje) + '</td>' +
+          '<td class="c">' + (t.equipos || '—') + '</td>' +
+          '<td class="num">' + numero(t.horasEnSitio, 2) + ' h</td></tr>';
+      }).join('');
+
+    return '<div class="tarjeta" style="border-left:4px solid ' +
+      (c.conviene ? 'var(--ok)' : 'var(--acento)') + '">' +
+      '<h2>Corredor ' + escapar(c.corredor) + ' · ' + c.localidades.length +
+        ' localidades</h2>' +
+      '<p class="ayuda"><b>' + escapar(m.recorrido) + '</b></p>' +
+      '<div class="rejilla rejilla-4" style="margin-bottom:12px">' +
+        '<div class="kpi"><div class="etiqueta">En un circuito</div>' +
+          '<div class="valor">' + pesos(m.total) + '</div>' +
+          '<div class="pie">' + m.dotacion + ' téc · ' + m.dias + 'd ' + m.noches + 'n · ' +
+          numero(m.km, 0) + ' km</div></div>' +
+        '<div class="kpi"><div class="etiqueta">Por separado</div>' +
+          '<div class="valor">' + pesos(c.porSeparado) + '</div>' +
+          '<div class="pie">' + c.localidades.length + ' viajes distintos</div></div>' +
+        '<div class="kpi"><div class="etiqueta">' +
+          (c.conviene ? 'Se ahorra' : 'Se pierde') + '</div>' +
+          '<div class="valor ' + (c.conviene ? '' : 'acento') + '">' +
+          pesos(Math.abs(c.ahorro)) + '</div>' +
+          '<div class="pie">' + (c.conviene ? 'conviene agrupar'
+            : 'conviene ir por separado') + '</div></div>' +
+        '<div class="kpi"><div class="etiqueta">Costo por equipo</div>' +
+          '<div class="valor">' + pesos(m.costoPorEquipo) + '</div>' +
+          '<div class="pie">' + m.equipos + ' equipos en el circuito</div></div>' +
+      '</div>' +
+      '<div class="alerta ' + (c.conviene ? 'bien' : 'aviso') + '">' +
+        '<span class="id">' + (c.conviene ? 'CONVIENE AGRUPAR'
+          : 'NO CONVIENE AGRUPAR') + '</span>' + humanizar(escapar(c.texto)) + '</div>' +
+      '<details style="margin-top:12px"><summary>Ver el recorrido tramo por tramo</summary>' +
+        '<div class="tabla-envoltorio" style="margin-top:10px"><table class="datos">' +
+        '<tr><th>Tramo</th><th class="num">Km</th><th class="num">Viaje</th>' +
+        '<th class="num">Peaje</th><th class="c">Equipos</th>' +
+        '<th class="num">En sitio</th></tr>' + paradas + '</table></div>' +
+        '<p class="chico" style="margin-top:8px">Hotel ' + pesos(m.hotel) +
+        ' · Viáticos ' + pesos(m.viatico) + ' · Combustible ' + pesos(m.combustible) +
+        ' · Peajes ' + pesos(m.peajes) + ' · Desgaste ' + pesos(m.desgaste) +
+        (m.sobretiempo ? ' · Sobretiempo ' + pesos(m.sobretiempo) : '') + '</p>' +
+      '</details></div>';
+  }).join('');
+
+  var ahorroTotal = totalSeparado - totalCircuito;
+
+  caja.innerHTML =
+    '<div class="alerta ' + (ahorroTotal > 0 ? 'bien' : 'aviso') +
+      '" style="margin-bottom:16px"><span class="id">RESUMEN DE TODOS LOS CORREDORES</span>' +
+      'Tomando en cada corredor la opción que convenga, el total es ' + pesos(totalCircuito) +
+      ' contra ' + pesos(totalSeparado) + ' atendiendo cada localidad por su cuenta: ' +
+      (ahorroTotal > 0 ? 'se ahorran ' + pesos(ahorroTotal) + '.'
+                       : 'no hay diferencia a favor de agrupar.') +
+      '</div>' + tarjetas;
 }
 
 function dibujarRutas() {

@@ -755,6 +755,39 @@ var ESQUEMA_CONFIG = [
   },
 
   {
+    seccion: 'CRITERIOS DE RECOMENDACION · por que se elige una opcion y no la mas barata',
+    parametros: [
+      { clave: 'P_HORAS_MANEJO_SOLO_MAX', etiqueta: 'Maximo de horas manejando sin acompanante',
+        valor: 5, unidad: 'h', tipo: 'numero', fuente: 'JEFATURA', critico: true,
+        validacion: { min: 0, max: 12 },
+        nota: 'Sobre esto, ir solo en camioneta se marca como riesgo de fatiga: no hay con ' +
+              'quien turnarse al volante. Copiapo esta a 9 horas. Es la causa tipica de ' +
+              'accidente en Ruta 5 y lo primero que revisa una mutual.' },
+
+      { clave: 'P_EQUIPOS_MIN_RESPALDO', etiqueta: 'Equipos desde los que conviene ir con respaldo',
+        valor: 3, unidad: 'equipos', tipo: 'entero', fuente: 'JEFATURA',
+        validacion: { min: 1, max: 20 },
+        nota: 'Fuera de la region, con esta cantidad de equipos o mas, ir solo significa que ' +
+              'cualquier problema que pida dos manos obliga a volver otro dia. Ese viaje ' +
+              'perdido se come el ahorro completo.' },
+
+      { clave: 'P_DIAS_FUERA_INCOMODOS', etiqueta: 'Dias fuera de casa desde los que se marca desgaste',
+        valor: 3, unidad: 'dias', tipo: 'entero', fuente: 'JEFATURA',
+        validacion: { min: 1, max: 20 },
+        nota: 'Un tecnico cuatro dias fuera rinde menos el ultimo dia y es mas dificil de ' +
+              'reemplazar si se enferma. No es ilegal, pero cuenta en la decision.' },
+
+      { clave: 'P_SOBRECOSTO_ACEPTABLE', etiqueta: 'Sobrecosto que se acepta por bajar el riesgo',
+        valor: 0.35, unidad: '%', tipo: 'porcentaje', fuente: 'JEFATURA', critico: true,
+        validacion: { min: 0, max: 2 },
+        nota: 'Cuanto mas caro que la opcion minima se acepta pagar con tal de sacar un ' +
+              'riesgo. En 0,35 el sistema paga hasta un 35% mas por no mandar a alguien ' +
+              'solo nueve horas al volante. Subirlo prioriza la seguridad, bajarlo prioriza ' +
+              'el bolsillo. Es LA decision de politica de la jefatura.' }
+    ]
+  },
+
+  {
     seccion: 'ANALISIS DE MEJORA FUTURA',
     parametros: [
       { clave: 'P_COSTO_CAMIONETA_NUEVA', etiqueta: 'Costo de una camioneta adicional',

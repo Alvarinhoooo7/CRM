@@ -211,8 +211,23 @@ function construirTablero_(idEscenario) {
       return compararModos_(d.localidad, datos.parametros.P_TECNICOS_POR_CUADRILLA, ctx);
     });
 
+  // Circuitos: agrupar localidades del mismo corredor en una sola salida.
+  // Se calcula aqui para que la web muestre el contraste contra ir por
+  // separado, que a veces gana y a veces pierde.
+  var circuitos = [];
+  try {
+    circuitosPorCorredor_(ctx).forEach(function (g) {
+      var c = compararCircuito_(g.localidades, ctx);
+      c.corredor = g.corredor;
+      circuitos.push(c);
+    });
+  } catch (e) {
+    circuitos = [];
+  }
+
   return {
     ok: true,
+    circuitos: circuitos,
     generado: new Date().toISOString(),
     escenarioActivo: idEscenario,
     escenarios: ESQUEMA_ESCENARIOS.definiciones,

@@ -293,6 +293,14 @@ input:disabled,select:disabled { background:#eef1ef; color:#52646b; }
  body{background:white;color:black}.cabecera,.pestanas,.banda-contexto,.btn,#notificacion,#login{display:none!important}
  .contenido{max-width:none;padding:0}.tarjeta{box-shadow:none;break-inside:avoid}.tabla-envoltorio{overflow:visible}
 }
+
+/* KPI Gigantes Bitacora */
+.kpi-gigante-container { display: flex; gap: 20px; margin-bottom: 15px; }
+.kpi-gigante { background: var(--fondo); padding: 15px 20px; border-radius: 8px; border: 1px solid var(--borde); text-align: center; flex: 1; }
+.kpi-gigante .valor { font-size: 2.5rem; font-weight: 700; line-height: 1; margin-bottom: 5px; }
+.kpi-gigante .etiqueta { font-size: 0.85rem; color: var(--texto-secundario); text-transform: uppercase; letter-spacing: 0.5px; }
+.orden-agendada { border-left: 4px solid var(--ok) !important; }
+
 </style>
 <style>
 .agenda-disposicion{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr);gap:20px}
@@ -306,4 +314,12 @@ input:disabled,select:disabled { background:#eef1ef; color:#52646b; }
 .seleccion-tecnicos{display:flex;flex-wrap:wrap;gap:14px;padding:10px 0}.seleccion-tecnicos label{font-size:13px}fieldset{border:1px solid var(--borde);border-radius:8px;margin:10px 0 22px;padding:14px}legend{font-weight:600}.comparacion-agenda{margin:24px 0}.comparador-orden{min-width:690px}.comparador-orden td{vertical-align:top}.comparador-orden ul{padding-left:16px;font-size:12px}.conexion-maps{padding:16px 22px}.conexion-maps p{font-size:13px;overflow-wrap:anywhere}
 @media(max-width:1000px){.agenda-disposicion{grid-template-columns:minmax(0,1fr)}.agenda-dia{max-height:none}}
 @media(max-width:600px){.agenda-mes{padding:10px}.dia-agenda{min-height:80px;padding:4px}.evento-agenda{font-size:9px}.dias-semana span{padding:5px;font-size:10px}.barra-mes h2{font-size:17px}.barra-mes .btn{padding:7px}.rejilla-calendario{gap:2px}}
+
+/* KPI Gigantes Bitacora */
+.kpi-gigante-container { display: flex; gap: 20px; margin-bottom: 15px; }
+.kpi-gigante { background: var(--fondo); padding: 15px 20px; border-radius: 8px; border: 1px solid var(--borde); text-align: center; flex: 1; }
+.kpi-gigante .valor { font-size: 2.5rem; font-weight: 700; line-height: 1; margin-bottom: 5px; }
+.kpi-gigante .etiqueta { font-size: 0.85rem; color: var(--texto-secundario); text-transform: uppercase; letter-spacing: 0.5px; }
+.orden-agendada { border-left: 4px solid var(--ok) !important; }
+
 </style>

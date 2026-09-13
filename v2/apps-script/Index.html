@@ -98,8 +98,8 @@
     <div class="vista" id="vista-guia">
       <div class="intro-vista"><div><div class="sobretitulo">PRESENTACIÓN · 4 INTEGRANTES</div><h2>Entender el plan. Explicar las decisiones.</h2><p>Un recorrido de 15 minutos por el problema, los cálculos y la experiencia del técnico.</p></div></div>
       <div class="rejilla rejilla-2">
-        <div class="tarjeta"><h2>01 · Caso y alcance · 3 minutos</h2><p>10 técnicos y 6 Peugeot Partner para 33 equipos en 16 localidades. El escenario literal considera 2 horas de instalación y 30 minutos de capacitación por equipo. Las cuadrillas de tres son una decisión del equipo.</p><button class="btn btn-secundario" onclick="mostrar('resumen')">Mostrar resumen</button></div>
-        <div class="tarjeta"><h2>02 · Rutas y recursos · 4 minutos</h2><p>Explica los corredores norte, sur y RM. Abre el itinerario, identifica conductor y vehículo y muestra las noches. El motor evalúa el plan ingresado; no demuestra un óptimo global.</p><button class="btn btn-secundario" onclick="mostrar('operacion')">Mostrar rutas</button></div>
+        <div class="tarjeta"><h2>01 · Caso y alcance ℹ️</h2><p>10 técnicos y 6 Peugeot Partner para 33 equipos en 16 localidades. El escenario literal considera 2 horas de instalación y 30 minutos de capacitación por equipo. Las cuadrillas de tres son una decisión del equipo.</p><button class="btn btn-secundario" onclick="mostrar('resumen')">Mostrar resumen</button></div>
+        <div class="tarjeta"><h2>02 · Rutas y recursos ℹ️</h2><p>Explica los corredores norte, sur y RM. Abre el itinerario, identifica conductor y vehículo y muestra las noches. El motor evalúa el plan ingresado; no demuestra un óptimo global.</p><button class="btn btn-secundario" onclick="mostrar('operacion')">Mostrar rutas</button></div>
         <div class="tarjeta"><h2>03 · Presupuesto · 4 minutos</h2><p>Combustible = km ÷ 20 × precio del litro. Hotel por persona y noche; viático una vez por técnico y día. La transferencia incluye gastos financiados por el técnico y reserva, pero no desgaste ni todos los costos empresariales.</p><button class="btn btn-secundario" onclick="mostrar('gastos')">Mostrar gastos</button></div>
         <div class="tarjeta"><h2>04 · Técnico y mejora · 4 minutos</h2><p>Abre la orden de T01: ruta, hotel, vehículo e implementos. Exporta el PDF y compara los dos escenarios. La capacitación digital es una propuesta que debe validarse con el cliente y el docente.</p><button class="btn btn-secundario" onclick="mostrar('orden')">Mostrar orden</button></div>
       </div>
@@ -211,14 +211,14 @@
 
     <!-- ---------- CALENDARIO ---------- -->
     <div class="vista" id="vista-calendario">
-      <div class="intro-vista"><div><div class="sobretitulo">AGENDA DE SERVICIOS</div><h2>Elige el día. Prepara la orden.</h2><p>Compara las alternativas y decide cómo realizar cada servicio. La agenda se guarda en Sheets.</p></div><button class="btn" onclick="nuevaOrdenAgenda()">+ Nueva orden</button></div>
+      <div class="intro-vista"><div><div class="sobretitulo">BITÁCORA DE TRABAJOS</div><h2>Selecciona una fecha. Registra el trabajo.</h2><p>Registra las órdenes completadas para llevar el historial. Todo se guarda en tu Excel (Google Sheets).</p></div><button class="btn" onclick="nuevaOrdenAgenda()">+ Registrar Trabajo</button></div>
       <div id="mensajeAgenda" role="status"></div>
       <div class="agenda-disposicion">
-        <div class="tarjeta agenda-mes"><div class="barra-mes"><button class="btn btn-secundario" aria-label="Mes anterior" onclick="moverMesAgenda(-1)">←</button><h2 id="tituloMesAgenda"></h2><button class="btn btn-secundario" aria-label="Mes siguiente" onclick="moverMesAgenda(1)">→</button><button class="btn btn-secundario" onclick="hoyAgenda()">Hoy</button><button class="btn btn-secundario" onclick="cargarAgenda()">Actualizar</button></div><div class="dias-semana"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div><div class="rejilla-calendario" id="rejillaAgenda"></div><p class="ayuda">Azul: plan del caso. Verde: órdenes guardadas. Un día puede contener varias visitas.</p></div>
+        <div class="tarjeta agenda-mes"><div class="barra-mes"><button class="btn btn-secundario" aria-label="Mes anterior" onclick="moverMesAgenda(-1)">←</button><h2 id="tituloMesAgenda"></h2><button class="btn btn-secundario" aria-label="Mes siguiente" onclick="moverMesAgenda(1)">→</button><button class="btn btn-secundario" onclick="hoyAgenda()">Hoy</button><button class="btn btn-secundario" onclick="cargarAgenda()">Actualizar</button></div><div class="dias-semana"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div><div class="rejilla-calendario" id="rejillaAgenda"></div><p class="ayuda">Azul: Historial Base. Verde: Trabajos Registrados. Haz clic en un día para ver los detalles. Un día puede contener varias visitas.</p></div>
         <div class="tarjeta agenda-dia"><h2 id="tituloDiaAgenda">Selecciona una fecha</h2><div id="detalleDiaAgenda"></div></div>
       </div>
       <div id="formularioAgenda" class="tarjeta oculto">
-        <div class="barra-mes"><h2 id="tituloFormularioAgenda">Nueva orden de servicio</h2><button class="btn btn-secundario" onclick="cerrarFormularioAgenda()">Cerrar</button></div>
+        <div class="barra-mes"><h2 id="tituloFormularioAgenda">Registrar trabajo completado</h2><button class="btn btn-secundario" onclick="cerrarFormularioAgenda()">Cerrar</button></div>
         <form id="formOrdenAgenda" onsubmit="event.preventDefault();compararAgenda()" oninput="invalidarPreviaAgenda()" onchange="invalidarPreviaAgenda()">
           <div class="rejilla rejilla-3">
             <div class="campo"><label for="agendaCliente">Cliente / nombre del servicio</label><input id="agendaCliente" required maxlength="120"></div>
@@ -235,7 +235,7 @@
             <div class="campo"><label for="agendaPeajes">Peajes ida y vuelta (CLP; confirmar $0 si no hay)</label><input id="agendaPeajes" type="number" min="0" placeholder="Monto estimado o cotizado"></div>
           </div>
           <div class="campo"><label for="agendaHotel">Alojamiento previsto por noche (si reserva varios días)</label><input id="agendaHotel" maxlength="1000" placeholder="Nombre, dirección y noche de cada alojamiento"></div>
-          <details open><summary>Cotizar bus, avión y transporte público</summary><p class="ayuda">Pasaje ida/vuelta por técnico. Horas totales de viaje, esperas y conexiones. Conexiones y flete son montos para toda la cuadrilla. Si falta un valor, esa opción no podrá agendarse.</p>
+          <details><summary>Registrar traslados alternativos (Opcional)</summary><p class="ayuda">Pasaje ida/vuelta por técnico. Horas totales de viaje, esperas y conexiones. Conexiones y flete son montos para toda la cuadrilla. Si falta un valor, esa opción no podrá agendarse.</p>
             <div class="tabla-envoltorio"><table class="datos"><tr><th>Alternativa</th><th>Pasaje por persona (CLP)</th><th>Horas de traslado total</th><th>Conexiones cuadrilla (CLP)</th><th>Flete cuadrilla (CLP)</th></tr>
               <tr><th>Bus</th><td><input id="cotBusPasaje" type="number" min="0" aria-label="Pasaje bus"></td><td><input id="cotBusHoras" type="number" min="0" step="0.1" aria-label="Horas bus"></td><td><input id="cotBusConexiones" type="number" min="0" value="0" aria-label="Conexiones bus"></td><td><input id="cotBusFlete" type="number" min="0" value="0" aria-label="Flete bus"></td></tr>
               <tr><th>Avión</th><td><input id="cotAvionPasaje" type="number" min="0" aria-label="Pasaje avión"></td><td><input id="cotAvionHoras" type="number" min="0" step="0.1" aria-label="Horas avión"></td><td><input id="cotAvionConexiones" type="number" min="0" value="0" aria-label="Conexiones avión"></td><td><input id="cotAvionFlete" type="number" min="0" value="0" aria-label="Flete avión"></td></tr>
@@ -244,10 +244,10 @@
             <label class="checklist-item"><input id="agendaHerramientas" type="checkbox">Tenemos resuelto el traslado de equipos, materiales y herramientas sin camioneta.</label>
           </details>
           <div class="campo"><label for="agendaNotas">Observaciones y fuente/fecha de las cotizaciones</label><input id="agendaNotas" maxlength="1000"></div>
-          <button id="btnCompararAgenda" class="btn" type="submit">1. Calcular y comparar alternativas</button>
+          <button id="btnCompararAgenda" class="btn" type="submit">Calcular costos logísticos</button>
         </form>
         <div id="comparacionAgenda" class="comparacion-agenda"></div>
-        <button id="btnGuardarAgenda" class="btn btn-acento oculto" onclick="confirmarOrdenAgenda()">2. Agendar con la alternativa elegida</button>
+        <button id="btnGuardarAgenda" class="btn btn-acento oculto" onclick="confirmarOrdenAgenda()">Guardar Registro</button>
         <p class="ayuda">Reserva estimada desde la salida hasta el regreso a base. Las salidas de varios días reservan bloques diarios; confirme los alojamientos y paradas intermedias. No se reservan pasajes ni hoteles automáticamente.</p>
       </div>
       <details class="tarjeta"><summary>Ver carga del plan original y simulador de referencia</summary>

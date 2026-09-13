@@ -94,6 +94,13 @@ function calcularTramos_(filas, ctx) {
   // elegiria rodear siempre. Los tramos vienen en orden de ejecucion.
   var acumulado = {};
 
+  // No hay limite de camionetas ni de gente hacia un mismo destino: si a una
+  // localidad llegan dos cuadrillas el mismo dia, se reparten el trabajo y lo
+  // terminan antes. Esta pasada previa cuenta cuanta gente hay realmente en
+  // cada sitio, para que la paralelizacion use el total y no la dotacion de
+  // una sola camioneta.
+  var cuadrilla = dotacionPorSitio_(filas);
+
   for (var i = 0; i < filas.length; i++) {
     var f = filas[i];
     if (!f.desde || !f.hasta) continue;
@@ -124,17 +131,61 @@ function calcularTramos_(filas, ctx) {
         'tecnico marcado. Marque las casillas de quienes van.'));
     }
 
+    // En la camioneta caben tres con sus bolsos y viajan comodos. Si hacen
+    // falta mas personas en ese destino, se manda otra camioneta: eso si esta
+    // permitido y el sistema lo suma solo.
+    if ((f.modo || 'Camioneta') === 'Camioneta' && nTecnicos > p.P_CAPACIDAD_CAMIONETA) {
+      ctx.alertas.push(alerta_('CAMIONETA_SOBRECARGADA', 'error',
+        'PLAN fila ' + f.fila + ': van ' + nTecnicos + ' tecnicos en una sola camioneta y ' +
+        'el maximo comodo son ' + p.P_CAPACIDAD_CAMIONETA + '. Reparta la cuadrilla en dos ' +
+        'vehiculos: pueden ir varias camionetas al mismo destino y el sistema junta a la ' +
+        'gente para calcular el trabajo en el sitio.'));
+    }
+
     // --- Distancia y tiempo: Google Maps, o respaldo declarado ---------
     // Se le pasan los tecnicos y las horas ya gastadas para que la decision
     // de rodear el peaje se tome con la jornada real, no con el dia vacio.
     var viaje = resolverViaje_(f.desde, f.hasta, nTecnicos, horasYaUsadas, ctx);
 
     // --- Trabajo en el destino ----------------------------------------
-    var primeraVisita = !ctx.visitadas[f.hasta] && f.hasta !== 'BASE';
-    var equipos = primeraVisita ? (destino.equipos || 0) : 0;
-    if (primeraVisita) ctx.visitadas[f.hasta] = true;
+    // El trabajo se ejecuta la primera vez que se llega a la localidad. Si ese
+    // dia llegan varias cuadrillas, TODAS trabajan: se reparten los equipos y
+    // el sitio se termina antes.
+    var sitioClave = f.hasta + '|' + f.dia;
+    var info = cuadrilla[sitioClave];
+    var esJornadaDeTrabajo = !!info && f.hasta !== 'BASE' &&
+                             !ctx.visitadas[f.hasta];
 
-    var sitio = horasEnSitio_(equipos, nTecnicos, primeraVisita, p);
+    var equipos = 0;
+    var sitio = { instalacion: 0, capacitacion: 0, total: 0 };
+
+    if (esJornadaDeTrabajo) {
+      var equiposDelSitio = destino.equipos || 0;
+
+      // Las horas dependen de TODA la gente presente, no de esta camioneta.
+      sitio = horasEnSitio_(equiposDelSitio, info.tecnicos, true, p);
+
+      // Los equipos se reparten entre las cuadrillas presentes en proporcion a
+      // su dotacion, con el resto al primero, para que la suma siempre cuadre.
+      equipos = repartirEquipos_(equiposDelSitio, info, f.cuadrilla);
+
+      info.atendidas = (info.atendidas || 0) + 1;
+      if (info.atendidas >= info.cuadrillas.length) ctx.visitadas[f.hasta] = true;
+
+      // Un solo aviso por sitio, no uno por cuadrilla que llega.
+      if (info.cuadrillas.length > 1 && info.atendidas === 1) {
+        ctx.alertas.push(alerta_('SITIO_COMPARTIDO', 'aviso',
+          f.hasta + ' el ' + f.dia + ' recibe ' + info.cuadrillas.length + ' cuadrillas (' +
+          info.cuadrillas.join(', ') + ') con ' + info.tecnicos + ' tecnicos en total. Se ' +
+          'reparten los ' + equiposDelSitio + ' equipos y el sitio se termina en ' +
+          redondear_(sitio.total, 2) + ' h en vez de ' +
+          redondear_(horasEnSitio_(equiposDelSitio, f.tecnicos.length, true, p).total, 2) +
+          ' h con una sola cuadrilla. Verifique que convenga: mas gente reduce el reloj ' +
+          'pero puede subir las horas-hombre pagadas.'));
+      }
+    }
+
+    var primeraVisita = esJornadaDeTrabajo;
 
     var horasTramo = viaje.horas + sitio.total;
     var horasHombre = horasTramo * nTecnicos;
@@ -840,11 +891,14 @@ function validarPlan_(tramos, jornadas, tecnicoDias, ctx) {
         j.cuadrilla + ' el ' + j.dia + ' requiere ' + j.horasExtra + ' h extra y las horas ' +
         'extra estan deshabilitadas en CONFIG.'));
     }
-    if (j.nTecnicos !== p.P_TECNICOS_POR_CUADRILLA) {
+    // El tamano de la cuadrilla NO es un limite: se manda la gente que haga
+    // falta. Solo se avisa si la jefatura pidio estandarizar la dotacion.
+    if (p.P_EXIGIR_TAMANO_CUADRILLA && j.nTecnicos !== p.P_TECNICOS_POR_CUADRILLA) {
       ctx.alertas.push(alerta_('CUADRILLA_INCOMPLETA', 'aviso',
-        j.cuadrilla + ' el ' + j.dia + ' sale con ' + j.nTecnicos + ' tecnicos y el ' +
-        'plan de referencia propone grupos de ' + p.P_TECNICOS_POR_CUADRILLA + '. Justifique la ' +
-        'excepcion o complete la cuadrilla.'));
+        j.cuadrilla + ' el ' + j.dia + ' sale con ' + j.nTecnicos + ' tecnicos y la ' +
+        'configuracion pide estandarizar en ' + p.P_TECNICOS_POR_CUADRILLA + '. Si la ' +
+        'dotacion distinta es deliberada, apague "Exigir que todas las cuadrillas tengan ' +
+        'ese tamano" en CONFIG.'));
     }
   });
 
@@ -983,6 +1037,68 @@ function validarPlan_(tramos, jornadas, tecnicoDias, ctx) {
 
 function alerta_(id, nivel, mensaje) {
   return { id: id, nivel: nivel, mensaje: mensaje };
+}
+
+/**
+ * Cuenta cuanta gente llega a cada sitio en cada dia, sumando TODAS las
+ * cuadrillas que coinciden ahi.
+ *
+ * Existe porque no hay limite de camionetas hacia un destino: si el trabajo
+ * conviene hacerlo con seis personas, se mandan dos camionetas de tres y el
+ * sitio se termina en la mitad del tiempo. La paralelizacion tiene que mirar
+ * el total presente, no la dotacion de un vehiculo.
+ *
+ * @param {Array} filas  tramos del plan
+ * @return {Object} clave "localidad|dia" -> {tecnicos, cuadrillas[], porCuadrilla{}}
+ */
+function dotacionPorSitio_(filas) {
+  var mapa = {};
+
+  for (var i = 0; i < filas.length; i++) {
+    var f = filas[i];
+    if (!f.hasta || f.hasta === 'BASE') continue;
+    if (!f.tecnicos || !f.tecnicos.length) continue;
+
+    var clave = f.hasta + '|' + f.dia;
+    if (!mapa[clave]) {
+      mapa[clave] = { tecnicos: 0, cuadrillas: [], porCuadrilla: {}, atendidas: 0 };
+    }
+    var info = mapa[clave];
+
+    // Una cuadrilla puede tener varios tramos que terminan en el mismo sitio
+    // el mismo dia; su dotacion se cuenta una sola vez.
+    if (info.porCuadrilla[f.cuadrilla] === undefined) {
+      info.porCuadrilla[f.cuadrilla] = f.tecnicos.length;
+      info.cuadrillas.push(f.cuadrilla);
+      info.tecnicos += f.tecnicos.length;
+    }
+  }
+  return mapa;
+}
+
+/**
+ * Reparte los equipos de un sitio entre las cuadrillas presentes, en
+ * proporcion a su dotacion. El resto se le asigna a la primera, de modo que
+ * la suma siempre da el total declarado en DESTINOS y ningun equipo se pierde
+ * ni se duplica por redondeo.
+ */
+function repartirEquipos_(equiposDelSitio, info, cuadrillaActual) {
+  if (info.cuadrillas.length === 1) return equiposDelSitio;
+
+  var asignado = 0;
+  var resultado = {};
+
+  for (var i = 0; i < info.cuadrillas.length; i++) {
+    var c = info.cuadrillas[i];
+    var parte = Math.floor(equiposDelSitio * info.porCuadrilla[c] / info.tecnicos);
+    resultado[c] = parte;
+    asignado += parte;
+  }
+
+  // El sobrante de la division entera va a la primera cuadrilla.
+  resultado[info.cuadrillas[0]] += (equiposDelSitio - asignado);
+
+  return resultado[cuadrillaActual] || 0;
 }
 
 function indexarPor_(lista, campo) {

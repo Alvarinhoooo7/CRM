@@ -139,11 +139,40 @@ var ESQUEMA_CONFIG = [
         nota: 'PDF: "6 camionetas con sus correspondientes herramientas". Define ' +
               'cuantos vehiculos V1..Vn ofrece la lista de PLAN.' },
 
-      { clave: 'P_TECNICOS_POR_CUADRILLA', etiqueta: 'Tecnicos por cuadrilla',
+      { clave: 'P_TECNICOS_POR_CUADRILLA', etiqueta: 'Tecnicos por cuadrilla, valor de referencia',
         valor: 3, unidad: 'personas', tipo: 'entero', fuente: 'JEFATURA', critico: true,
         validacion: { min: 1, max: 10 },
-        nota: 'Decisión de planificación, no exigencia de cuadrillas del PDF. Con 10 técnicos salen 3 cuadrillas ' +
-              'completas y 1 tecnico de holgura: el motor lo reporta, no lo oculta.' },
+        nota: 'NO ES UN LIMITE, es solo el valor que se usa para estimar cuando todavia no ' +
+              'hay un plan: el comparador de transporte y el simulador necesitan suponer un ' +
+              'tamano. Cada cuadrilla del plan puede llevar los tecnicos que haga falta, y ' +
+              'a un mismo destino pueden ir varias cuadrillas y varias camionetas si esa ' +
+              'es la mejor opcion. Quien decide es el costo, no este numero.' },
+
+      { clave: 'P_CAPACIDAD_CAMIONETA', etiqueta: 'Maximo de tecnicos por camioneta',
+        valor: 3, unidad: 'personas', tipo: 'entero', fuente: 'JEFATURA', critico: true,
+        validacion: { min: 1, max: 8 },
+        nota: 'ESTE SI ES UN LIMITE REAL, y es de comodidad: en una Peugeot Partner van ' +
+              'tres personas con sus bolsos de herramientas y viajan bien. No limita ' +
+              'cuanta gente puede ir a un destino: si el trabajo conviene hacerlo con seis ' +
+              'personas, se mandan DOS camionetas de tres. El sistema suma la gente de ' +
+              'todas las cuadrillas que llegan al mismo sitio el mismo dia.' },
+
+      { clave: 'P_EXIGIR_TAMANO_CUADRILLA', etiqueta: 'Exigir que todas las cuadrillas tengan ese tamano',
+        valor: false, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
+        validacion: { valores: [true, false] },
+        nota: 'FALSO por decision de jefatura: no hay limite de tecnicos por cuadrilla ni ' +
+              'de camionetas hacia un destino, mientras sea la opcion mas conveniente. ' +
+              'Ponerlo en verdadero hace que el sistema avise cada vez que una cuadrilla ' +
+              'sale con una dotacion distinta a la de referencia, que es util si alguna vez ' +
+              'se quiere estandarizar.' },
+
+      { clave: 'P_TECNICOS_MAX_POR_SITIO', etiqueta: 'Maximo de tecnicos trabajando a la vez en un sitio',
+        valor: 0, unidad: 'personas', tipo: 'entero', fuente: 'JEFATURA',
+        validacion: { min: 0, max: 50 },
+        nota: 'Tope fisico de cuantas personas caben trabajando en paralelo en una misma ' +
+              'instalacion. 0 significa sin tope: mandar mas gente siempre reduce el tiempo. ' +
+              'Si se pone un numero, la paralelizacion deja de mejorar sobre ese limite, ' +
+              'porque diez personas en una sala chica se estorban.' },
 
       { clave: 'P_RENDIMIENTO', etiqueta: 'Rendimiento camioneta Peugeot Partner',
         valor: 20, unidad: 'km/L', tipo: 'numero', fuente: 'PDF', critico: true,
@@ -1287,6 +1316,17 @@ var ESQUEMA_VALIDACIONES = [
     descripcion: 'Si el viaje de ida supera P_UMBRAL_PERNOCTA y el tramo no declara ' +
                  'noches de hotel, el regreso el mismo dia no es viable.' },
 
+  { id: 'CAMIONETA_SOBRECARGADA', nivel: 'error',
+    descripcion: 'Un tramo en camioneta no puede llevar mas tecnicos que ' +
+                 'P_CAPACIDAD_CAMIONETA. La solucion no es apretarse: es mandar otra ' +
+                 'camioneta al mismo destino, que si esta permitido.' },
+
+  { id: 'SITIO_COMPARTIDO', nivel: 'aviso',
+    descripcion: 'Dos o mas cuadrillas llegan a la misma localidad el mismo dia. No es un ' +
+                 'error: se reparten los equipos y el sitio se termina antes. El aviso ' +
+                 'informa cuanto tiempo se gana, para contrastarlo con las horas-hombre ' +
+                 'adicionales que se pagan.' },
+
   { id: 'VEHICULO_DUPLICADO', nivel: 'error',
     descripcion: 'Un vehiculo no puede estar asignado a dos cuadrillas el mismo dia.' },
 
@@ -1474,8 +1514,16 @@ function horasEnSitio_(equipos, tecnicosEnSitio, primeraVisita, p) {
     return { instalacion: 0, capacitacion: 0, total: 0 };
   }
 
+  // No hay limite de cuanta gente se manda a un destino: mientras mas tecnicos,
+  // menos tiempo. El unico tope posible es fisico, si la jefatura declara
+  // cuantas personas caben trabajando a la vez en una misma instalacion.
+  var enParalelo = tecnicosEnSitio;
+  if (p.P_TECNICOS_MAX_POR_SITIO > 0) {
+    enParalelo = Math.min(tecnicosEnSitio, p.P_TECNICOS_MAX_POR_SITIO);
+  }
+
   var instalacion = p.P_PARALELIZA_INSTALACION
-    ? Math.ceil(equipos / tecnicosEnSitio) * p.P_T_INSTALACION
+    ? Math.ceil(equipos / enParalelo) * p.P_T_INSTALACION
     : equipos * p.P_T_INSTALACION;
 
   // Se capacita al cliente, no al equipo: una sesion por sitio visitado.

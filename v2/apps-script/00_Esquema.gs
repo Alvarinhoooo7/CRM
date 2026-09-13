@@ -423,6 +423,27 @@ var ESQUEMA_CONFIG = [
               'Se paga por tecnico y por dia con al menos un tramo asignado, dentro o ' +
               'fuera de la Region Metropolitana.' },
 
+      { clave: 'P_TECNICOS_RESIDEN_RM', etiqueta: 'Todos los tecnicos viven en la Region Metropolitana',
+        valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
+        validacion: { valores: [true, false] },
+        nota: 'DATO DE LA NOMINA. Los diez tecnicos viven en Santiago. De aqui sale toda la ' +
+              'logica de quien duerme en su casa y quien no: trabajando en la RM vuelven a ' +
+              'casa y solo se les paga colacion; fuera de la RM y con pernoctacion se les ' +
+              'paga viatico completo.' },
+
+      { clave: 'P_COLACION_RM', etiqueta: 'Colacion por dia trabajando dentro de la RM',
+        valor: 5000, unidad: '$/dia', tipo: 'moneda', fuente: 'JEFATURA', critico: true,
+        validacion: { min: 0, max: 100000 },
+        nota: 'El tecnico que trabaja en Santiago almuerza fuera pero duerme en su casa: se ' +
+              'le paga la colacion del dia, no el viatico completo. Es lo que reemplaza al ' +
+              'viatico dentro de la region.' },
+
+      { clave: 'P_PAGA_PASAJE_TRANSPORTE_PUBLICO', etiqueta: 'Se le reembolsa el pasaje de micro o metro',
+        valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
+        validacion: { valores: [true, false] },
+        nota: 'Cuando el trabajo se hace en transporte publico, el pasaje lo pone la empresa ' +
+              'y entra en la transferencia del tecnico. No es plata de su bolsillo.' },
+
       { clave: 'P_VIATICO_SOLO_FUERA_RM', etiqueta: 'El viatico se paga solo fuera de la Region Metropolitana',
         valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
         validacion: { valores: [true, false] },
@@ -778,12 +799,14 @@ var ESQUEMA_CONFIG = [
               'reemplazar si se enferma. No es ilegal, pero cuenta en la decision.' },
 
       { clave: 'P_SOBRECOSTO_ACEPTABLE', etiqueta: 'Sobrecosto que se acepta por bajar el riesgo',
-        valor: 0.35, unidad: '%', tipo: 'porcentaje', fuente: 'JEFATURA', critico: true,
+        valor: 0.70, unidad: '%', tipo: 'porcentaje', fuente: 'JEFATURA', critico: true,
         validacion: { min: 0, max: 2 },
-        nota: 'Cuanto mas caro que la opcion minima se acepta pagar con tal de sacar un ' +
-              'riesgo. En 0,35 el sistema paga hasta un 35% mas por no mandar a alguien ' +
-              'solo nueve horas al volante. Subirlo prioriza la seguridad, bajarlo prioriza ' +
-              'el bolsillo. Es LA decision de politica de la jefatura.' }
+        nota: 'ESTA ES LA DECISION DE POLITICA DE LA JEFATURA y conviene defenderla en el ' +
+              'informe: es donde el sistema deja de ser una calculadora y toma una postura. ' +
+              'En 0,70 se acepta pagar hasta un 70% mas que la opcion minima con tal de ' +
+              'sacar un riesgo operacional. Con ese margen, a Copiapo se manda gente de a ' +
+              'dos en avion en vez de una persona sola cuatro dias en bus. Bajarlo a 0,35 ' +
+              'prioriza el bolsillo y el sistema vuelve a elegir mandar a alguien solo.' }
     ]
   },
 
@@ -832,9 +855,9 @@ var ESQUEMA_TABLAS = {
       ['T05', 'Matias Contreras', 'Si', 'Si', '', ''],
       ['T06', 'Fernanda Araya',   'Si', 'Si', '', ''],
       ['T07', 'Cristian Vega',    'Si', 'Si', '', ''],
-      ['T08', 'Paulina Herrera',  'No', 'Si', '', ''],
+      ['T08', 'Paulina Herrera',  'Si', 'Si', '', ''],
       ['T09', 'Rodrigo Caceres',  'Si', 'Si', '', ''],
-      ['T10', 'Barbara Neira',    'No', 'Si', '', '']
+      ['T10', 'Barbara Neira',    'Si', 'Si', '', '']
     ]
   },
 

@@ -570,11 +570,21 @@ function calcularTecnicoDias_(tramos, jornadas, ctx) {
     var cumpleRegion = !p.P_VIATICO_SOLO_FUERA_RM || x.fueraRM;
     var cumpleDuracion = !p.P_VIATICO_SOLO_CON_PERNOCTACION || x.viajeLargo;
 
-    x.viatico = (cumpleRegion && cumpleDuracion) ? p.P_VIATICO : 0;
-    x.motivoViatico = x.viatico
-      ? 'Fuera de la RM y en viaje de mas de un dia'
-      : (!cumpleRegion ? 'Dentro de la Region Metropolitana: duerme en su casa'
-                       : 'Sale y vuelve el mismo dia: no corresponde viatico');
+    // Los tecnicos viven en Santiago. Trabajando en la RM vuelven a su casa y
+    // se les paga solo la colacion del dia. Fuera de la RM durmiendo afuera,
+    // viatico completo. Nunca las dos cosas juntas.
+    if (cumpleRegion && cumpleDuracion) {
+      x.viatico = p.P_VIATICO;
+      x.colacion = 0;
+      x.motivoViatico = 'Viatico: fuera de la RM y con pernoctacion';
+    } else {
+      x.viatico = 0;
+      x.colacion = p.P_COLACION_RM;
+      x.motivoViatico = x.fueraRM
+        ? 'Colacion: sale y vuelve el mismo dia, no corresponde viatico'
+        : 'Colacion: trabaja en la RM y duerme en su casa';
+    }
+    x.asignacionDiaria = x.viatico + x.colacion;
 
     salida.push(x);
   }
@@ -624,7 +634,10 @@ function imputarALocalidades_(tramos, tecnicoDias, ctx) {
 
   // Los viaticos son por persona-dia y no pertenecen a un tramo: se reparten
   // en proporcion a las horas-hombre de cada localidad.
-  var viaticoTotal = tecnicoDias.reduce(function (s, x) { return s + x.viatico; }, 0);
+  // Viatico y colacion se reparten igual: son por persona-dia y no
+  // pertenecen a un tramo concreto.
+  var viaticoTotal = tecnicoDias.reduce(function (s, x) {
+    return s + x.viatico + (x.colacion || 0); }, 0);
 
   var salida = [];
   for (var nombre in mapa) {
@@ -673,7 +686,7 @@ function calcularTransferencias_(tramos, tecnicoDias, jornadas, ctx) {
     var r = asegurar(td.tecnico);
     r.dias += 1;
     r.noches += td.noches;
-    if (p.P_TRANSFIERE_VIATICO) r.viatico += td.viatico;
+    if (p.P_TRANSFIERE_VIATICO) r.viatico += td.viatico + (td.colacion || 0);
   }
 
   for (var j = 0; j < tramos.length; j++) {
@@ -814,7 +827,7 @@ function consolidarTotales_(tramos, tecnicoDias, jornadas, ctx) {
     km: 0, litros: 0,
     combustible: 0, peajes: 0, desgaste: 0, pasajes: 0,
     flete: 0, arriendo: 0, traslados: 0, hotel: 0, viatico: 0,
-    sobretiempo: 0, imprevistos: 0, gastoTotal: 0,
+    colacion: 0, sobretiempo: 0, imprevistos: 0, gastoTotal: 0,
     horasHombre: 0, horasEnSitio: 0, horasViaje: 0,
     nochesPersona: 0, tecnicoDias: tecnicoDias.length,
     diasHabiles: 0, tramos: tramos.length,
@@ -846,6 +859,7 @@ function consolidarTotales_(tramos, tecnicoDias, jornadas, ctx) {
   }
 
   T.viatico = tecnicoDias.reduce(function (s, x) { return s + x.viatico; }, 0);
+  T.colacion = tecnicoDias.reduce(function (s, x) { return s + (x.colacion || 0); }, 0);
 
   for (var j = 0; j < jornadas.length; j++) {
     T.sobretiempo += jornadas[j].costoSobretiempo || 0;
@@ -856,7 +870,7 @@ function consolidarTotales_(tramos, tecnicoDias, jornadas, ctx) {
   }
 
   var subtotal = T.combustible + T.peajes + T.desgaste + T.pasajes + T.flete +
-                 T.arriendo + T.traslados + T.hotel + T.viatico;
+                 T.arriendo + T.traslados + T.hotel + T.viatico + T.colacion;
   T.imprevistos = Math.round(subtotal * p.P_HOLGURA_IMPREVISTOS);
   T.gastoTotal = subtotal + T.sobretiempo + T.imprevistos;
 
@@ -1347,9 +1361,21 @@ function compararModos_(destino, nTecnicosSugerido, ctx) {
     // Talca en el mismo dia: el tecnico llega a dormir a su casa.
     var cumpleRegion = !p.P_VIATICO_SOLO_FUERA_RM || !enRM;
     var cumpleDuracion = !p.P_VIATICO_SOLO_CON_PERNOCTACION || m.dias > 1;
-    var viatico = (cumpleRegion && cumpleDuracion) ? m.dias * n * p.P_VIATICO : 0;
 
-    var total = costoTransporte + m.costoPorDia + m.hotel + viatico + m.sobretiempo;
+    // Viatico completo solo al que duerme fuera de la region. Al que trabaja
+    // en Santiago y vuelve a su casa se le paga la colacion del dia.
+    var viatico = 0, colacion = 0, motivo = '';
+    if (cumpleRegion && cumpleDuracion) {
+      viatico = m.dias * n * p.P_VIATICO;
+      motivo = 'Viatico: fuera de la RM y con pernoctacion';
+    } else {
+      colacion = m.dias * n * p.P_COLACION_RM;
+      motivo = enRM ? 'Colacion: trabaja en la RM y duerme en su casa'
+                    : 'Colacion: sale y vuelve el mismo dia';
+    }
+
+    var total = costoTransporte + m.costoPorDia + m.hotel + viatico + colacion +
+                m.sobretiempo;
 
     return {
       modo: modo,
@@ -1369,18 +1395,23 @@ function compararModos_(destino, nTecnicosSugerido, ctx) {
       transporte: Math.round(costoTransporte + m.costoPorDia),
       hotel: m.hotel,
       viatico: Math.round(viatico),
-      motivoViatico: viatico
-        ? 'Fuera de la RM y con pernoctacion'
-        : (!cumpleRegion ? 'Dentro de la RM: el tecnico duerme en su casa'
-                         : 'Ida y vuelta el mismo dia: no corresponde'),
+      colacion: Math.round(colacion),
+      motivoViatico: motivo,
       total: Math.round(total)
     };
   };
+
+  // Todas las combinaciones de modo y dotacion que se evaluaron. La tabla
+  // muestra una fila por modo, pero la recomendacion tiene que poder elegir
+  // "bus con dos personas" aunque "bus con una" sea mas barato: si no, nunca
+  // veria la alternativa segura.
+  var combinaciones = [];
 
   /** De todas las dotaciones probadas para un modo, se queda con la barata. */
   var mejorDe = function (candidatas) {
     var validas = candidatas.filter(function (c) { return c; });
     if (!validas.length) return null;
+    validas.forEach(function (c) { combinaciones.push(c); });
     validas.sort(function (a, b) { return a.total - b.total; });
     var elegida = validas[0];
     elegida.dotacionesEvaluadas = validas.map(function (c) {
@@ -1522,7 +1553,7 @@ function compararModos_(destino, nTecnicosSugerido, ctx) {
 
   // La mas barata no siempre es la que hay que tomar: se evaluan los riesgos
   // operacionales y se redacta por que se elige una y no otra.
-  var recomendacion = recomendarOpcion_(opciones, d, enRM, p);
+  var recomendacion = recomendarOpcion_(combinaciones, d, enRM, p);
   if (recomendacion.elegida) mejor = recomendacion.elegida;
 
   return {
@@ -1594,12 +1625,17 @@ function riesgosDeLaOpcion_(opcion, destino, enRM, p) {
 
   // --- Sin respaldo tecnico lejos de la base ----------------------------
   if (opcion.dotacion === 1 && !enRM && equipos >= p.P_EQUIPOS_MIN_RESPALDO) {
+    // Ir solo un dia y volver es incomodo. Ir solo varios dias, durmiendo
+    // fuera y con varios equipos encima, es otra cosa: no hay a quien
+    // recurrir ni quien termine el trabajo si pasa cualquier cosa.
+    var variosDias = opcion.dias > 1;
     riesgos.push({
       tipo: 'SIN_RESPALDO',
-      gravedad: 'media',
-      texto: 'Va solo a instalar ' + equipos + ' equipos lejos de la base. Si uno necesita ' +
-             'dos manos o no levanta, no hay a quien recurrir: hay que volver otro dia, y ' +
-             'ese viaje perdido se come el ahorro completo.'
+      gravedad: variosDias ? 'alta' : 'media',
+      texto: 'Va solo a instalar ' + equipos + ' equipos lejos de la base' +
+             (variosDias ? ', y son ' + opcion.dias + ' dias durmiendo fuera' : '') +
+             '. Si uno necesita dos manos o no levanta, no hay a quien recurrir: hay que ' +
+             'volver otro dia, y ese viaje perdido se come el ahorro completo.'
     });
   }
 
@@ -1666,14 +1702,26 @@ function recomendarOpcion_(opciones, destino, enRM, p) {
 
   // Dentro de lo que se acepta pagar de mas, se busca la opcion con menos
   // riesgo. Si empatan en riesgo, gana la barata porque vienen ordenadas.
-  var candidatas = ejecutables.filter(function (o) { return o.total <= tope; });
-  var mejorPorRiesgo = candidatas.slice().sort(function (a, b) {
-    if (a.puntajeRiesgo !== b.puntajeRiesgo) return a.puntajeRiesgo - b.puntajeRiesgo;
-    return a.total - b.total;
-  })[0];
+  // Solo un riesgo GRAVE justifica pagar mas. Las horas extra o un dia de
+  // mas fuera de casa se informan, pero no valen un 60% de sobrecosto: son
+  // legales, estan pagadas y no ponen a nadie en peligro. Pagar por evitarlas
+  // seria mala economia disfrazada de prudencia.
+  var elegida = masBarata;
 
-  var elegida = (mejorPorRiesgo && mejorPorRiesgo.puntajeRiesgo < masBarata.puntajeRiesgo)
-    ? mejorPorRiesgo : masBarata;
+  if (masBarata.riesgosAltos > 0) {
+    var seguras = ejecutables.filter(function (o) {
+      return o.riesgosAltos === 0 && o.total <= tope;
+    });
+    if (seguras.length) {
+      // Entre las que resuelven el problema grave, la mas barata; y a igual
+      // precio, la que ademas arrastre menos riesgos menores.
+      seguras.sort(function (a, b) {
+        if (a.total !== b.total) return a.total - b.total;
+        return a.puntajeRiesgo - b.puntajeRiesgo;
+      });
+      elegida = seguras[0];
+    }
+  }
   var sobrecosto = elegida.total - masBarata.total;
 
   // --- Redaccion ---------------------------------------------------------
@@ -1839,9 +1887,11 @@ function evaluarCircuito_(localidades, n, modo, ctx) {
 
   var cumpleRegion = !p.P_VIATICO_SOLO_FUERA_RM || algunoFueraRM;
   var cumpleDuracion = !p.P_VIATICO_SOLO_CON_PERNOCTACION || m.dias > 1;
-  var viatico = (cumpleRegion && cumpleDuracion) ? m.dias * n * p.P_VIATICO : 0;
+  var viatico = 0, colacion = 0;
+  if (cumpleRegion && cumpleDuracion) viatico = m.dias * n * p.P_VIATICO;
+  else colacion = m.dias * n * p.P_COLACION_RM;
 
-  var total = transporte + m.hotel + viatico + m.sobretiempo;
+  var total = transporte + m.hotel + viatico + colacion + m.sobretiempo;
 
   return {
     localidades: localidades,
@@ -1862,6 +1912,7 @@ function evaluarCircuito_(localidades, n, modo, ctx) {
     transporte: Math.round(transporte),
     hotel: m.hotel,
     viatico: Math.round(viatico),
+    colacion: Math.round(colacion),
     sobretiempo: m.sobretiempo,
     total: Math.round(total),
     costoPorEquipo: equipos ? Math.round(total / equipos) : 0,
@@ -1888,10 +1939,34 @@ function compararCircuito_(localidades, ctx) {
   dotaciones = dotaciones.filter(function (x) { return x >= minimo; });
   if (!dotaciones.length) dotaciones = [minimo];
 
-  var circuitos = dotaciones.map(function (n) {
-    return evaluarCircuito_(localidades, n, 'Camioneta', ctx);
-  }).filter(function (x) { return x; })
-    .sort(function (a, b) { return a.total - b.total; });
+  // ORDEN DEL RECORRIDO. Saliendo de Santiago hacia un corredor hay dos
+  // formas sensatas de hacerlo y ninguna zigzaguea:
+  //
+  //   · De cerca a lejos: se va atendiendo en el camino de subida y se
+  //     vuelve derecho. Es lo natural para Melipilla antes que San Antonio.
+  //   · De lejos a cerca: se sube derecho al punto mas lejano y se atiende
+  //     bajando. Sirve cuando conviene llegar temprano al destino largo.
+  //
+  // Se evaluan las dos y gana la mas barata. Lo que NUNCA se hace es saltar
+  // de un corredor a otro y volver: por eso los circuitos se arman dentro de
+  // un mismo eje y ordenados por distancia, no en cualquier orden.
+  var porKm = localidades.slice().sort(function (a, b) {
+    return (ctx.destinos[a].km || 0) - (ctx.destinos[b].km || 0);
+  });
+  var ordenes = [
+    { etiqueta: 'De cerca a lejos, atendiendo en el camino', ruta: porKm },
+    { etiqueta: 'Derecho al mas lejano y atendiendo de vuelta',
+      ruta: porKm.slice().reverse() }
+  ];
+
+  var circuitos = [];
+  ordenes.forEach(function (o) {
+    dotaciones.forEach(function (n) {
+      var c = evaluarCircuito_(o.ruta, n, 'Camioneta', ctx);
+      if (c) { c.orden = o.etiqueta; circuitos.push(c); }
+    });
+  });
+  circuitos.sort(function (a, b) { return a.total - b.total; });
 
   // Lo mismo, pero cada localidad como salida independiente.
   var porSeparado = 0;
@@ -1950,9 +2025,9 @@ function circuitosPorCorredor_(ctx) {
     if (!Object.prototype.hasOwnProperty.call(grupos, c)) continue;
     if (grupos[c].length < 2) continue;   // con una sola no hay circuito
 
-    // Se ordenan de mas lejos a mas cerca: se sube derecho y se baja
-    // atendiendo, que es como se hace en la practica.
-    grupos[c].sort(function (a, b) { return b.km - a.km; });
+    // Se entregan de cerca a lejos. compararCircuito_ prueba tambien el
+    // orden inverso y se queda con el que salga mas barato.
+    grupos[c].sort(function (a, b) { return a.km - b.km; });
     salida.push({
       corredor: c,
       localidades: grupos[c].map(function (x) { return x.localidad; })

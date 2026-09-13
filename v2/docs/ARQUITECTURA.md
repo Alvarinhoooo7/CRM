@@ -35,6 +35,8 @@ El navegador no consulta directamente Sheets ni almacena la clave configurada. `
 | `06_Api.gs` | Login, sesión, tablero, simulador, orden y configuración |
 | `07_WebApp.gs` | Entrada web, menús, exportación PDF y diagnóstico en Google |
 | `08_Editor.gs` | Edición validada de destinos y plan; bloqueo y detección de conflicto |
+| `09_ConexionMaps.gs` | Proveedor nativo o Routes API, diagnóstico y actualización por lotes |
+| `10_Agenda.gs` | Órdenes nuevas, comparación humana de transporte, bloques de calendario y estados |
 | `Index.html` | Estructura de diez pantallas y campos |
 | `Estilos.html` | Estilos, tablas desplazables, disposición móvil e impresión |
 | `Scripts.html` | Login, navegación, tablas, gráficos, órdenes y simulación |
@@ -77,6 +79,11 @@ Todas las funciones siguientes, salvo iniciar/cerrar sesión, exigen token váli
 | `obtenerEditor` | Token | Borrador de destinos/plan, parámetros y revisiones |
 | `guardarDestino` | Token, revisión y campos | Guarda dirección/hotel/enlace; conserva equipos |
 | `guardarPlanWeb` | Token, revisión y filas | Guarda filas de planificación validadas |
+| `obtenerAgenda` | Token | Lee órdenes nuevas de `AGENDA` |
+| `previsualizarOrden` | Token y formulario | Consulta ida/regreso y compara camioneta, bus, avión y transporte público |
+| `guardarOrdenAgenda` | Token, previa y modo elegido | Guarda solo la alternativa seleccionada después de validar conflictos |
+| `cambiarEstadoAgenda` | Token, ID, revisión y estado | Actualiza estado administrativo con transición controlada |
+| `diagnosticarMaps` / `actualizarMapsWeb` | Token | Prueba una ruta o procesa un lote limitado de rutas |
 
 `doGet` sirve la página y `onOpen` construye el menú de Sheets. Las funciones administrativas de instalación, lectura y PDF directo son privadas. Para configurar un libro se ejecuta `configurarAcceso_` desde el editor; no desde una petición web.
 

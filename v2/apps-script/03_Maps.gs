@@ -109,25 +109,26 @@ function normalizarTexto_(texto) {
  */
 function consultarRutaMaps_(direccionOrigen, direccionDestino, evitarPeajes, p) {
   try {
+    var conexion = conexionMaps_();
+    if (conexion.proveedor === 'ROUTES_API') return consultarRoutesApi_(direccionOrigen, direccionDestino, evitarPeajes, p, conexion.clave);
     var buscador = Maps.newDirectionFinder()
       .setOrigin(direccionOrigen)
       .setDestination(direccionDestino)
-      .setMode(Maps.Mode.DRIVING)
+      .setMode(Maps.DirectionFinder.Mode.DRIVING)
       .setRegion('cl')
       .setLanguage('es');
 
-    if (evitarPeajes) buscador.setAvoid(Maps.Avoid.TOLLS);
+    if (evitarPeajes) buscador.setAvoid(Maps.DirectionFinder.Avoid.TOLLS);
 
     // Hora de salida de referencia, para que la duracion considere el trafico
     // tipico de esa franja y no el de este instante.
-    var salida = proximaSalida_(p);
-    if (salida) buscador.setDepart(salida);
+    // Duración estática: no inventar una hora de salida distinta de la orden.
 
     var respuesta = buscador.getDirections();
 
     if (!respuesta || !respuesta.routes || !respuesta.routes.length) {
       return { ok: false, km: 0, horas: 0, pasos: [],
-               error: 'Google no devolvio ninguna ruta entre "' + direccionOrigen +
+               error: (respuesta && respuesta.status ? respuesta.status + ': ' : '') + 'Google no devolvio ninguna ruta entre "' + direccionOrigen +
                       '" y "' + direccionDestino + '". Revise que ambas direcciones ' +
                       'incluyan comuna y pais.' };
     }
@@ -156,6 +157,7 @@ function consultarRutaMaps_(direccionOrigen, direccionDestino, evitarPeajes, p) 
       horas: Math.round(horasCrudas * p.P_FACTOR_HORAS * 100) / 100,
       horasCrudas: Math.round(horasCrudas * 100) / 100,
       pasos: pasos,
+      fuente: 'Google Maps · Apps Script',
       error: ''
     };
 
@@ -441,7 +443,7 @@ function cargarCacheRutas_(libro, p) {
     if (!fila[0]) continue;
 
     var consultado = fila[5] ? new Date(fila[5]).getTime() : 0;
-    if (ahora - consultado > vigenciaMs) continue;  // vencida: se reconsulta
+    if (!Number.isFinite(consultado) || ahora - consultado > vigenciaMs || fila[6] !== 'OK') continue;
 
     mapa[claveRuta_(fila[0], fila[1], fila[4] === true || fila[4] === 'Si')] = {
       km: Number(fila[2]) || 0,
@@ -488,10 +490,11 @@ function resolverRutas_(pares, direcciones, p, libro) {
   var nuevas = [];
   var errores = [];
   var consultas = 0;
+  var iniciado = Date.now();
 
   var variantes = p.P_MAPS_COMPARA_SIN_PEAJE ? [false, true] : [false];
 
-  for (var i = 0; i < pares.length; i++) {
+  resolver: for (var i = 0; i < pares.length; i++) {
     var origen = pares[i].origen;
     var destino = pares[i].destino;
     if (origen === destino) continue;
@@ -501,11 +504,11 @@ function resolverRutas_(pares, direcciones, p, libro) {
       var clave = claveRuta_(origen, destino, evitar);
       if (rutas[clave]) continue;  // ya estaba en cache vigente
 
-      if (consultas >= p.P_MAPS_MAX_CONSULTAS) {
+      if (consultas >= Math.min(p.P_MAPS_MAX_CONSULTAS, 20) || Date.now() - iniciado > 45000) {
         errores.push('Se alcanzo el tope de ' + p.P_MAPS_MAX_CONSULTAS + ' consultas a ' +
                      'Maps en esta ejecucion. Quedan tramos sin resolver: vuelva a ' +
                      'recalcular o suba P_MAPS_MAX_CONSULTAS.');
-        return { rutas: rutas, consultas: consultas, errores: errores, nuevas: nuevas };
+        break resolver;
       }
 
       var dirOrigen = direcciones[origen];

@@ -1,243 +1,113 @@
-# Servicio Técnico en Ruta
+# 📖 Manual a Prueba de Tontos: Servicio Técnico en Ruta
 
-Web de planificación para **33 equipos en 16 localidades**, con **10 técnicos y 6 camionetas Peugeot Partner**. Google Sheets guarda los datos y Apps Script calcula trayectos, jornadas, costos y órdenes de servicio.
+¡Hola! Bienvenido al manual definitivo del sistema de **Coordinación y Agendamiento**. 
+Este documento está diseñado para que **cualquier persona**, incluso si no tiene conocimientos técnicos, entienda exactamente qué hace este sistema, cómo funciona la conexión entre el Excel (Google Sheets) y la Web, y cómo operarlo en el día a día.
 
-**Versión vigente: `v2/apps-script/`, versión 2.1.0.** Se depuró la raíz eliminando las carpetas heredadas de v1 (`apps-script/`, `docs/`, `tests/`) para evitar conflictos de sincronización y mantener una base limpia.
+Lee este documento con calma. Si sigues estos pasos, tendrás el control total del sistema.
 
-Esta guía está escrita para los cuatro expositores. Leer primero las secciones 1–5 y luego practicar con el **[guion de presentación](v2/docs/PRESENTACION.md)**. Para entender el código, consultar la [arquitectura](v2/docs/ARQUITECTURA.md).
+---
 
-## 1. Qué pide el caso
+## 🧠 1. El Concepto Básico: ¿Qué es este sistema?
 
-Fuente: [Estudio de caso 1.pdf](Estudio%20de%20caso%201.pdf). El nombre del archivo dice «1», pero contiene la planificación inicial y el **caso 2 de gestión tecnológica**. La última página permite cuatro expositores, establece una presentación de 15 minutos y pide informe PDF para el 14-09-2026.
+Este sistema administra **33 instalaciones de equipos en 16 localidades distintas de Chile**. Para hacer este trabajo cuentas con **10 técnicos y 6 camionetas**.
 
-| Requisito | Dónde se demuestra |
-| --- | --- |
-| Asignar 10 técnicos y 6 camionetas | Planificación, Rutas y flota, Técnicos |
-| Instalación de 2 horas por equipo | Motor de trabajo en sitio e itinerario |
-| Capacitación de 30 minutos por equipo | Escenario inicial **Literal del enunciado** |
-| Rendimiento de 20 km/L | Presupuesto de combustible |
-| Calcular trayectos y peajes | Maps, catálogo y desglose de plazas |
-| Considerar alojamiento y alimentación | Noches por tramo, hotel y viático diario |
-| Determinar dinero necesario por técnico | Gastos → Transferencia por técnico |
-| Consultar ruta, implementos, hotel y camioneta | Orden de servicio y PDF |
-| Proponer y justificar una mejora | Comparación de escenarios y transporte |
+El sistema tiene dos partes fundamentales que trabajan juntas:
+1. **El Excel (Google Sheets) = Tu Base de Datos 🗄️**: Aquí es donde "viven" los datos. Las hojas de cálculo guardan la lista de técnicos, las direcciones de los clientes, los peajes y las órdenes guardadas. Si quieres cambiar el sueldo de un técnico, lo haces aquí.
+2. **La Página Web = Tu Motor de Cálculo ⚙️**: Es la cara bonita e inteligente del sistema. La web lee los datos del Excel, consulta a Google Maps las distancias, hace cálculos matemáticos complejos (como sumar peajes, calcular horas extras y desgaste de camionetas) y te los muestra en gráficos y tablas fáciles de entender.
 
-**Los grupos de tres del enunciado corresponden al trabajo académico.** Organizar también a los técnicos en cuadrillas de tres es una decisión nuestra; no es una exigencia textual sobre la dotación. Los cuatro estudiantes presentan una operación de diez técnicos: son grupos distintos.
+> [!WARNING]
+> **REGLA DE ORO**: La Web **NO SE ACTUALIZA SOLA** en tiempo real si cambias algo en el Excel. Si vas al Excel y le cambias el sueldo a un técnico, tienes que ir a la Web y presionar el botón **Recalcular** para que la Web lea el Excel de nuevo y haga los cálculos con el nuevo sueldo.
 
-| Localidad | Equipos | Localidad | Equipos |
-| --- | ---: | --- | ---: |
-| Copiapó | 5 | Pudahuel | 3 |
-| Coquimbo | 2 | Maipú | 3 |
-| La Calera | 1 | Curicó | 1 |
-| San Antonio | 2 | Talca | 3 |
-| Melipilla | 2 | San Pedro de la Paz | 1 |
-| Lo Barnechea | 3 | Penco | 1 |
-| Puente Alto | 1 | Tomé | 1 |
-| Santiago | 3 | Santa Juana | 1 |
-| **Total** | **33** | **Localidades** | **16** |
+---
 
-Las claves internas de algunas localidades no llevan tildes: `Copiapo`, `Maipu`, `Tome`. Se conservan para relacionar las tablas; la búsqueda admite tildes.
+## 🚀 2. Instalación y Configuración (Se hace UNA SOLA VEZ)
 
-## 2. Funcionamiento de principio a fin
+Para que el sistema funcione, necesitas configurar 3 cosas. Solo debes hacerlo la primera vez.
 
-La coordinación ingresa un plan, revisa sus resultados y entrega una orden a cada técnico. **El motor evalúa las filas ingresadas; no genera automáticamente un óptimo global.** Las comparaciones de transporte y hotel/sobretiempo no cambian por sí solas el plan.
+### Paso 2.1: Dar acceso a los correos y crear la contraseña
+El sistema no usa tu cuenta de Google normal para entrar, usa una lista de correos que tú autorices y una **contraseña única** que todos compartirán.
 
-1. Ingresar con el correo y clave de demostración configurados en el servidor.
-2. Abrir **Planificación** y revisar direcciones, hotel, material de capacitación, tramos y parámetros.
-3. Guardar el formulario modificado. Guardar cambia las hojas; los resultados todavía muestran el cálculo anterior.
-4. Pulsar **Recalcular**. Se leen las hojas, se resuelven rutas y se ejecutan ambos escenarios.
-5. Revisar **Resumen** y corregir las alertas de error antes de comprometer la salida.
-6. Revisar **Gastos**: total de operación y monto propuesto para cada técnico.
-7. Abrir **Orden de servicio**, seleccionar técnico y revisar ruta, vehículo, hotel y checklist.
-8. Exportar el PDF en Drive o descargar el itinerario CSV en **Rutas y flota**.
+1. Abre tu **Google Sheets (El Excel)**.
+2. Arriba en el menú, haz clic en **Extensiones > Apps Script**. Se abrirá una nueva pestaña con código.
+3. En la barra izquierda de esta nueva pestaña, haz clic en la **Rueda de Engranaje (Configuración del proyecto)**.
+4. Baja hasta el final donde dice **Propiedades de la secuencia de comandos**.
+5. Agrega dos propiedades:
+   * Escribe **`ACCESO_EMAIL`** y al lado pon los correos que quieres que entren, separados por coma (ejemplo: `jefe@empresa.cl, tecnico@empresa.cl`).
+   * Escribe **`ACCESO_CLAVE_INICIAL`** y al lado inventa una contraseña (debe tener mínimo 10 letras/números).
+6. Presiona **Guardar**.
+7. Ahora, vuelve al código haciendo clic en el ícono de `</>` (Editor) a la izquierda.
+8. En la lista de archivos, selecciona `06_Api.gs`. Arriba en la barra verás un menú desplegable, elige la opción `configurarAcceso_` y presiona el botón **Ejecutar**.
+   * *¿Para qué hicimos esto? Para encriptar tu contraseña y que sea imposible de hackear. ¡Tu acceso ya está listo!*
 
-### Las diez pantallas
+### Paso 2.2: Conectar Google Maps (Vital para la Camioneta)
+> [!IMPORTANT]
+> Si la Web no te deja elegir la opción de **Camioneta** en el calendario y solo te ofrece Buses, es porque te saltaste este paso. Al no tener Google Maps conectado, el sistema no sabe a cuántos kilómetros está el cliente y prohíbe usar la camioneta.
 
-| Pantalla | Información y acciones |
-| --- | --- |
-| Resumen | Equipos planificados, gasto, días, utilización, km, hotel, alertas y comparación de escenarios |
-| Rutas y flota | Cuadrillas, conductor, tramos, fuentes y camionetas; búsqueda por localidad/técnico, filtro diario, enlaces Maps y CSV |
-| Gastos | Categorías, localidades, composición del presupuesto y transferencias |
-| Técnicos | Tabla ordenable de carga, viaje, trabajo en sitio y ficha individual |
-| Calendario | Horas asignadas y holgura por día; simulación de una visita independiente |
-| Transporte | Comparación referencial de modos y decisión autopista/desvío |
-| Peajes | Catálogo, secuencias por localidad y estado estimado/verificado |
-| Orden de servicio | Ruta del técnico, hotel, camioneta, conductor, monto y materiales; exportación a PDF |
-| Planificación | Edición de destinos, tramos y parámetros con validación en servidor |
-| Guía del equipo | Recorrido de 15 minutos y respuestas a preguntas frecuentes |
+1. Vuelve a la **Rueda de Engranaje** (Configuración) en Apps Script.
+2. En las Propiedades, agrega dos nuevas:
+   * **`MAPS_PROVEEDOR`**: Escribe `ROUTES_API`
+   * **`GOOGLE_MAPS_API_KEY`**: Pega aquí tu clave de API de Google Cloud (Asegúrate de que tenga habilitado el servicio *Routes API*).
+3. Ve a tu Google Sheets, abre el menú arriba que dice **Servicio Técnico** y haz clic en **Actualizar rutas con Google Maps**. ¡Listo!
 
-El técnico T10 queda de reserva en la siembra. Su orden no inventa tramos ni viáticos. Elegir un técnico es un filtro del panel compartido, **no autenticación individual**.
+### Paso 2.3: Obtener el Link de tu Página Web
+1. En el editor de Apps Script, arriba a la derecha hay un botón azul que dice **Implementar (Deploy)**.
+2. Elige **Nueva implementación**.
+3. En la tuerca de configuración, elige **Aplicación Web**.
+4. En "¿Quién tiene acceso?", elige **Cualquier persona**.
+5. Dale a Implementar y copia la **URL (Enlace)** que te da. 
+   * *Este enlace es el que le enviarás a tu equipo para que entren al sistema.*
 
-Las casillas de materiales de la orden sirven para verificar la salida mientras esa vista está abierta. No registran inventario ni entrega persistente: se reinician al regenerar la orden. La web tampoco registra instalaciones finalizadas ni realiza transferencias bancarias.
+---
 
-## 3. Plan inicial y escenarios
+## 🛠️ 3. ¿Cómo funciona el Excel (Google Sheets)?
 
-La siembra contiene **23 tramos en cinco días de operación**:
+Tu archivo tiene varias hojas (pestañas abajo). No tienes que tocar todas, estas son las importantes:
 
-| Cuadrilla | Técnicos | Vehículo | Circuito |
-| --- | --- | --- | --- |
-| C1 | T01–T03 | V1 | Coquimbo → Copiapó → Coquimbo → La Calera → base |
-| C2 | T04–T06 | V2 | Curicó → Talca → Santa Juana → San Pedro de la Paz → Penco → Tomé → base |
-| C3 | T07–T09 | V3 | RM, Melipilla y San Antonio, con regreso diario |
+* **CONFIG**: Aquí están las reglas del juego. Sueldos diarios ($25.000), costo de los hoteles ($50.000), rendimiento de las camionetas (20km/L) y el precio de la bencina. Si la bencina sube, la cambias aquí.
+* **DESTINOS**: La lista de todas las ciudades donde tienes que ir (Copiapó, Coquimbo, etc.) y cuántos equipos hay que instalar en cada una. 
+* **PLAN**: **Esta es la hoja de la planificación actual**. Aquí dice que el "Técnico 1" irá a "Copiapó" en la "Camioneta 1" el "Día 1".
+* **AGENDA**: Esta hoja guarda el historial de los trabajos nuevos que tú agendes a futuro usando la página web.
+* **PEAJES**: Un catálogo con todos los precios de los pórticos y peajes de Chile.
 
-V4–V6 quedan sin asignación. La base de siembra es INACAP Santiago Sur, Av. Vicuña Mackenna 3864, Macul. Direcciones de clientes y hoteles son referencias demostrativas que deben confirmarse para operar.
+---
 
-La fecha inicial de operación es **21-09-2026**; no debe confundirse con la entrega académica del 14-09-2026. El calendario omite fines de semana cuando está habilitado y los feriados cargados en CONFIG.
+## 🖥️ 4. ¿Cómo operar la Página Web (Dashboard)?
 
-| Aspecto | Literal del enunciado | Mejora propuesta |
-| --- | --- | --- |
-| Identificador | `LITERAL_PDF` | `OPERACION_REAL`, nombre interno heredado |
-| Capacitación | 30 minutos por equipo | 15 minutos por localidad |
-| Sesiones | 33 | 16 |
-| Tiempo de sesiones | 16,5 horas | 4 horas |
-| Condición | Requisito base | Preparación digital previa, propuesta por validar |
+Cuando entras a la URL de la web y pones tu correo y contraseña, verás un menú a la izquierda con muchas opciones. Así se usa en el día a día:
 
-**La diferencia es 12,5 horas de sesiones, no 12,5 horas-persona.** El motor contabiliza la permanencia de toda la cuadrilla; con tres técnicos, la diferencia es 37,5 horas-persona. No supone que los tres impartan capacitación, sino que permanecen asignados.
+### A. La Pantalla "Resumen" y "Gastos"
+* Entras aquí para ver la foto completa. Verás cuánta plata se va a gastar en total en viáticos, peajes, bencina y hoteles según lo que está planificado en el Excel.
+* En **Gastos**, verás cuánto dinero exacto hay que transferirle a cada técnico para que pueda sobrevivir el viaje (su viático + plata para bencina).
 
-Ambos escenarios usan las mismas filas de PLAN. Si el literal supera una jornada, hay que redistribuir los tramos. Elegir la mejora para ocultar esa alerta no demuestra cumplimiento del PDF. Los antiguos totales monetarios del README no se consideran resultados vigentes: dependen de las rutas, el escenario y la hoja actual.
+### B. El "Calendario" (La joya del sistema)
+Esta pantalla te muestra qué está haciendo cada técnico. Y lo más importante: **Te permite agendar órdenes nuevas**.
 
-## 4. Fórmulas para explicar el presupuesto
+**Paso a paso para agendar una orden:**
+1. Haz clic en **+ Nueva orden**.
+2. Ingresa los datos del cliente: **Dirección exacta** y **Cantidad de equipos a instalar**.
+3. El sistema hará algo mágico: Consultará a Google Maps y te mostrará una comparativa:
+   * **Opción Camioneta**: Calcula la bencina, el desgaste, todos los peajes y el viático del técnico en base al tiempo de manejo.
+   * **Opción Bus / Avión**: Tú pones cuánto vale el pasaje, y el sistema suma los viáticos y horas extra que implicaría irse en bus.
+4. Con estos números en la mesa, tomas una **decisión inteligente**. Haces clic en la opción más barata/rápida y presionas **Agendar**. (Esto se guardará automáticamente en la hoja AGENDA del Excel).
 
-### Trabajo en sitio
+### C. "Planificación" y "Recalcular"
+* Si descubriste que un técnico está enfermo o un vehículo se averió, puedes ir a la pantalla de **Planificación** y reasignar los viajes. 
+* **No olvides:** Cada vez que hagas un cambio aquí o en el Excel, debes ir al menú principal y presionar el botón **RECALCULAR**. Si no lo haces, la web seguirá mostrándote los costos antiguos.
 
-Se supone que cada técnico puede instalar un equipo de forma independiente. Es una hipótesis de paralelización del modelo.
+### D. La "Orden de Servicio"
+* Una vez que estás feliz con el plan y los costos, vas a esta pantalla, seleccionas a un Técnico (ej. Técnico 1) y el sistema generará un comprobante (Hoja de ruta). 
+* Este comprobante le dice al técnico: "Toma las llaves de la Camioneta V1, este es tu hotel, se te depositaron $250.000, y debes ir a esta dirección". 
+* Puedes exportarlo a PDF e imprimírselo.
 
-```text
-Instalación = techo(equipos / técnicos presentes) × 2 horas
-Capacitación literal = equipos × 0,5 horas
-Tiempo en sitio = instalación + capacitación
-Horas del tramo = viaje + tiempo en sitio
-Horas-persona = horas del tramo × técnicos presentes
-```
+---
 
-Ejemplo: cinco equipos con tres técnicos requieren dos tandas, es decir **4 h de instalación**. La capacitación literal suma **2,5 h**. La visita ocupa **6,5 h**, más viaje. La mejora propuesta reduce esa visita a 4,25 h más viaje.
+## ⚙️ 5. De dónde salen las Matemáticas (Fórmulas Simples)
 
-Solo la **primera visita** a una localidad ejecuta el trabajo. Volver por Coquimbo para dormir o retornar a base no duplica equipos. El modelo no reparte automáticamente una localidad entre varias visitas.
+Si alguien te pregunta "¿Por qué me sale tan caro este viaje?", aquí está la explicación:
 
-### Traslado, hotel y viático
+1. **Tiempo en Sitio**: Instalar 1 equipo toma 2 horas. Capacitar a la gente toma 30 minutos. Si mandas 3 técnicos a instalar 3 equipos, terminan en 2 horas porque trabajan en paralelo.
+2. **Combustible**: El sistema toma los kilómetros de Google Maps, los divide por el rendimiento (ej. 20 km por Litro) y los multiplica por el precio del diésel.
+3. **Desgaste**: Cada kilómetro recorrido de la camioneta suma un costo por desgaste de neumáticos y aceite.
+4. **Hotel y Viático**: Por cada noche lejos de casa, suma el valor del hotel. Por cada día que el técnico está trabajando, suma el valor del viático diario (que incluye la comida).
 
-```text
-Litros = km del tramo / 20
-Combustible = litros × precio del diésel
-Desgaste = km × costo de desgaste por km
-Hotel individual = noches × técnicos × tarifa
-Hotel compartido = noches × techo(técnicos / 2) × tarifa de habitación
-Viático = días desplegados del técnico × tarifa diaria
-```
-
-La referencia es **$25.000 por técnico-día, incluida alimentación**, y **$50.000 por noche individual**. Son decisiones del modelo, no cotizaciones. Un técnico con cuatro tramos el mismo día recibe un solo viático.
-
-El peaje usa las plazas del catálogo local 2026 y ajustes. En corredor común se consideran las plazas que diferencian ambos extremos; entre corredores distintos se aproxima pasando por base. **Una plaza pagada de ida no queda gratis al regreso:** cada cruce vuelve a costearse. Un cero entre dos localidades puede significar que el catálogo no incluye una plaza entre ellas y debe contrastarse con la ruta real.
-
-El desvío sin peajes se compara por combustible, desgaste y tiempo adicional, con límites de desvío y ahorro mínimo. Maps y una secuencia estimada no equivalen a una auditoría de TAG.
-
-### Jornada y sobretiempo
-
-Se suman horas por cuadrilla y día. El semáforo usa la jornada efectiva, contractual y extra permitida; los valores de siembra son 7,4 h, 8,4 h y hasta 2 h adicionales. Son umbrales del modelo académico: **no certifican cumplimiento laboral**.
-
-```text
-Horas extra = máximo(0, horas de la jornada − jornada contractual)
-Costo extra = horas extra × técnicos × costo hora × recargo
-```
-
-La comparación con hotel orienta la decisión, pero no cambia las noches de PLAN. El control heredado llamado «semanal» acumula extra sobre el período completo: para períodos de más de una semana debe revisarse por semana real.
-
-### Total operativo frente a transferencia
-
-```text
-Subtotal operativo = combustible + peajes + desgaste + pasajes + flete
-                  + arriendo + conexiones + hotel + viáticos
-Reserva operativa = redondear(subtotal operativo × porcentaje de imprevistos)
-Total operativo = subtotal operativo + sobretiempo + reserva operativa
-
-Base personal = viático + hotel + combustible + peajes pagados por el técnico
-Reserva personal = redondear(base personal × porcentaje de imprevistos)
-Transferencia = techo((base personal + reserva personal) / paso) × paso
-```
-
-La configuración decide cuáles de esos conceptos se adelantan al técnico. El TAG pagado por la empresa es costo operativo, pero no dinero que recibe el conductor. El combustible y peaje en efectivo se asignan al conductor o se prorratean. Rotar conductor puede cambiar cuánto recibe cada integrante.
-
-**La suma de transferencias no tiene por qué coincidir con el total operativo:** desgaste, gastos empresariales, sobretiempo y redondeo explican la diferencia. La nómina ordinaria completa no está incluida; el presupuesto no es un estado de resultados contable.
-
-El editor operativo admite **camionetas**. Bus y avión son comparaciones referenciales. El costeo heredado de pasajes entre localidades y sus adelantos no cubre un circuito multimodal completo; no presentar esas alternativas como despachos o reservas ya ejecutables.
-
-## 5. Datos y límites del sistema
-
-| Dato | Origen | Interpretación |
-| --- | --- | --- |
-| Dotación, equipos, 2 h, 30 min, 20 km/L | PDF | Requisitos base |
-| Cuadrillas, jornada, base y viático | Decisiones/supuestos | Deben justificarse |
-| Km y tiempo | Maps de Apps Script, con caché | Estimación de viaje |
-| Distancia de respaldo | Columnas de DESTINOS | Revisar fuente y alertas |
-| Peajes | Catálogo local basado en documentos MOP | Verificar secuencia, horario y categoría |
-| Hoteles y pasajes | Datos de referencia | No son reservas confirmadas |
-| Horas y montos | Motor JavaScript | Resultados sobre las filas ingresadas |
-
-Consultar la [guía de tarifas de camionetas](GUIA_TARIFAS_CAMIONETAS_2026.md). Los PDF fuente están en `../Valores Porticos, Peajes/`. Esta implementación no renovó cotizaciones comerciales.
-
-La web planifica: **no confirma instalaciones realizadas, no envía capacitación, no controla stock, no reserva hoteles ni mueve dinero**. Las funciones de ejecución y AppSheet de v1 no se trasladaron a v2. Los indicadores dicen «planificados» por esa razón.
-
-## 6. Instalación y sincronización con clasp
-
-### Proyecto ya instalado
-
-```powershell
-# Desde CRM
-node v2/tests/web.cjs
-node v2/tests/interfaz.cjs
-Set-Location v2/apps-script
-clasp status
-clasp push
-```
-
-`clasp status` debe incluir `08_Editor.gs` y `Editor.html`. Después de subir, actualizar la URL existente en **Implementar → Administrar implementaciones → Editar → Nueva versión → Implementar**.
-
-`clasp push` sube archivos: no ejecuta funciones, no instala hojas y no actualiza por sí solo una implementación con versión fija. Referencia: [guía oficial de clasp](https://developers.google.com/apps-script/guides/clasp).
-
-### Libro nuevo
-
-1. Elegir la hoja de cálculo y abrir **Extensiones → Apps Script**.
-2. Vincular `v2/apps-script/.clasp.json` al proyecto correcto y subir el código. La vinculación está excluida de Git.
-3. En **Configuración del proyecto → Propiedades del script**, definir `ACCESO_EMAIL` y `ACCESO_CLAVE_INICIAL`, con una clave elegida de al menos 10 caracteres.
-4. Ejecutar `configurarAcceso_`. Guarda el ID del libro, calcula el hash y elimina la propiedad de clave inicial.
-5. Recargar la hoja y usar **Servicio Técnico → Crear o restaurar hojas base**.
-6. Usar **Actualizar rutas con Google Maps** y **Recalcular y validar plan**. Revisar km, tiempos y alertas.
-7. Abrir el panel desde el menú o crear una implementación de aplicación web. Mantener acceso limitado a las cuentas de la presentación cuando Google lo permita.
-
-Subir código conserva la clave existente. No ejecutar la configuración de acceso para actualizar solo la interfaz. No hay una nueva clave predeterminada en el código.
-
-**«Reinstalar desde cero» borra los datos de trabajo.** «Crear o restaurar hojas base» conserva hojas existentes; no garantiza reparar todos los rangos dañados de un libro antiguo. Revisar la estructura antes de reinstalar.
-
-Las funciones internas ahora terminan en `_`, lo que impide su llamada directa desde el navegador. Los menús ya usan los nombres actualizados. Se mantienen tres hojas de trabajo visibles y auxiliares ocultas; consultar la arquitectura para su función.
-
-### Vista previa sin Google
-
-```powershell
-node v2/tests/preview.cjs
-```
-
-Abrir `http://127.0.0.1:4173` con cualquier correo y clave de prueba. Usa **rutas sintéticas**, sin Google ni datos privados. Permite ensayar pantallas; guardar en Sheets y exportar en Drive están deshabilitados. No presentar esas cifras como el presupuesto real. `Ctrl+C` cierra el servidor.
-
-## 7. Acceso y colaboración
-
-El login entrega un token; cada endpoint de datos/escritura exige sesión. El navegador conserva el token en memoria y el servidor en caché por hasta seis horas. La caché puede expulsarlo antes. Recargar requiere volver a ingresar.
-
-Las funciones internas no se exponen por RPC. Los campos se validan en servidor. El guardado de destinos y plan usa un bloqueo y una revisión del contenido: si otro integrante guardó primero, se rechaza el borrador antiguo. Evitar edición manual simultánea en Sheets: la edición directa de la hoja no respeta el bloqueo del script.
-
-El acceso es compartido para coordinación y demo; no hay roles individuales. La propiedad heredada `MODO_ACCESO` **no implementa** por sí sola identificación Google por técnico. Producción requiere identidad y permisos individuales.
-
-## 8. Verificación y estado de entrega
-
-- `node v2/tests/web.cjs`: 18 comprobaciones del motor, escenarios, fechas serializadas, sesión, simulación y validación de planificación.
-- `node v2/tests/interfaz.cjs`: diez pantallas y flujos con DOM/RPC simulados: enlace directo, búsqueda, estado vacío, reserva, escenarios y borrador.
-- `ejecutarPruebas_` en Apps Script: diagnóstico contra la hoja vigente y sus rutas. Requiere ejecutarlo en Google.
-
-**Pruebas locales ejecutadas y sincronización completada.** El proyecto se sincronizó exitosamente con Google Apps Script mediante `clasp push` desde `v2/apps-script/` sobre el proyecto vinculado.
-
-Antes de presentar, completar los [pendientes de integración](v2/docs/PENDIENTES.md): login, Maps, guardado, escenarios y PDF en la cuenta del equipo.
-
-## 9. Material para los cuatro integrantes
-
-- [Guion de 15 minutos y preguntas](v2/docs/PRESENTACION.md).
-- [Arquitectura y mantenimiento](v2/docs/ARQUITECTURA.md).
-- [Pendientes de puesta en marcha](v2/docs/PENDIENTES.md).
+¡Y eso es todo! Si sigues este manual, dominarás la planificación de toda la operación. Si alguna vez el sistema se rompe o los números no cuadran, ve al Excel, presiona **Servicio Técnico > Diagnóstico del sistema** y el sistema te dirá exactamente qué hoja o celda está causando el problema.

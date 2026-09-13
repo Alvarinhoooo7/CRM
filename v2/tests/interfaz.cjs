@@ -20,13 +20,14 @@ const document={body:{dataset:{vista:'orden',tecnico:'T01'}},
  querySelectorAll:s=>s==='.vista'?[...nodes.values()].filter(n=>n.id.startsWith('vista-')):s==='.pestana'?buttons:[],
  querySelector:s=>buttons.find(b=>s.includes('"'+b.dataset.vista+'"'))||null};
 const apis={
+ obtenerAgenda:()=>({ok:true,ordenes:[],tecnicos:datos.tecnicos,flota:datos.flota,fechaHoy:'2026-09-21'}),
  obtenerTablero:(_,e)=>ctx.obtenerTablero('test',e||'LITERAL_PDF',true),recalcular:(_,e)=>ctx.obtenerTablero('test',e||'LITERAL_PDF',true),
  obtenerOrdenServicio:(_,c,e)=>ctx.obtenerOrdenServicio('test',c,e),obtenerCatalogoPeajes:()=>ctx.obtenerCatalogoPeajes('test'),
  simularTrabajo:(_,s)=>ctx.simularTrabajo('test',s),
  obtenerEditor:()=>({destinos:ctx.SIEMBRA_DESTINOS,plan:datos.tramos.map(t=>[t.n,t.dia,t.cuadrilla,t.modo,t.vehiculo,t.desde,t.hasta,t.noches,t.conductor].concat(datos.tecnicos.map(x=>t.tecnicos.includes(x.codigo)))),encabezadosPlan:ctx.ESQUEMA_PLAN.columnas.map(c=>c.titulo).concat(datos.tecnicos.map(t=>t.codigo)),parametros:datos.parametros,esquema:ctx.obtenerEsquemaConfig('test')})};
 const rpc=(ok,fail)=>new Proxy({},{get:(_,name)=>name==='withSuccessHandler'?f=>rpc(f,fail):name==='withFailureHandler'?f=>rpc(ok,f):(...args)=>{try{const r=apis[name](...args);if(ok)ok(r);}catch(e){if(fail)fail(e);else throw e;}}});
 const ui=vm.createContext({console,document,google:{script:{run:rpc()}},window:{addEventListener(){}},setTimeout:()=>{},clearTimeout(){},Date,Math,Number,String,Object,Array,URL,Blob,alert(){}});
-for(const file of ['Scripts.html','Editor.html'])vm.runInContext(fs.readFileSync(path.join(root,file),'utf8').replace(/^<script>\s*/,'').replace(/<\/script>\s*$/,''),ui,{filename:file});
+for(const file of ['Scripts.html','Editor.html','Agenda.html'])vm.runInContext(fs.readFileSync(path.join(root,file),'utf8').replace(/^<script>\s*/,'').replace(/<\/script>\s*$/,''),ui,{filename:file});
 ui.TOKEN='test';ui.cargarTablero(false);
 assert.ok(!nodes.get('errorGeneral').innerHTML,nodes.get('errorGeneral').innerHTML);
 assert.ok(nodes.get('kpis').innerHTML.includes('33'));

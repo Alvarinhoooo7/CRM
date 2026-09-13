@@ -1024,7 +1024,8 @@ function compararModos_(destino, nTecnicos, ctx) {
 
   opciones.push(evaluar('Camioneta', horasIda,
     (2 * km / p.P_RENDIMIENTO) * p.P_DIESEL + 2 * peaje + 2 * km * p.P_COSTO_KM,
-    true));
+    km > 0 && horasIda > 0,
+    km > 0 && horasIda > 0 ? 'Verificar disponibilidad de vehículo y conductor en el plan.' : 'Sin distancia y tiempo válidos. Actualice Maps.'));
 
   if (p.P_PERMITE_BUS) {
     var tb = d.pasajeBus || 0;
@@ -1059,9 +1060,9 @@ function compararModos_(destino, nTecnicos, ctx) {
     equipos: d.equipos || 0,
     tecnicos: nTecnicos,
     opciones: opciones,
-    masEconomico: ejecutables.length ? ejecutables[0].modo : 'Camioneta',
-    masRapido: opciones.slice().sort(function (a, b) {
-      return a.horasIda - b.horasIda; })[0].modo,
+    masEconomico: ejecutables.length ? ejecutables[0].modo : 'Sin datos suficientes',
+    masRapido: ejecutables.length ? ejecutables.slice().sort(function (a, b) {
+      return a.horasIda - b.horasIda; })[0].modo : 'Sin datos suficientes',
     masEconomicoTeorico: todas[0].modo,
     ahorroSiSeLibera: (todas[0].modo !== (ejecutables.length ? ejecutables[0].modo : ''))
       ? Math.round((ejecutables.length ? ejecutables[0].total : 0) - todas[0].total) : 0

@@ -104,8 +104,8 @@ function cargarTablero(forzar, escenario) {
   var solicitudActual = ++SECUENCIA_TABLERO;
   document.getElementById('errorGeneral').classList.add('oculto');
   mostrarCargando(true, forzar
-    ? 'Recalculando y consultando Google Maps...'
-    : 'Calculando el plan y consultando Google Maps...');
+    ? 'Recalculando con las rutas guardadas...'
+    : 'Leyendo la planificación de Sheets...');
 
   google.script.run
     .withSuccessHandler(function (payload) {
@@ -113,6 +113,7 @@ function cargarTablero(forzar, escenario) {
       DATOS = payload;
       mostrarCargando(false);
       dibujarTodo();
+      cargarAgenda();
       if (document.getElementById('vista-orden').classList.contains('activa')) cargarOrden();
       if (VISTA_INICIAL && VISTA_INICIAL !== 'resumen') {
         mostrar(VISTA_INICIAL);
@@ -161,6 +162,7 @@ function mostrar(vista) {
   if (DATOS && GRAFICOS_LISTOS) setTimeout(dibujarGraficos, 30);
   if (vista === 'orden' && DATOS) cargarOrden();
   if (vista === 'gestion' && DATOS) cargarEditor();
+  if (vista === 'calendario') cargarAgenda();
   if (vista === 'peajes' && !document.getElementById('tablaPlazas').innerHTML) {
     cargarPeajes();
   }
@@ -598,8 +600,8 @@ function dibujarModos() {
 
     return '<tr><td><b>' + escapar(c.localidad) + '</b><br><span class="chico">' +
       c.equipos + ' equipos</span></td>' + celdas +
-      '<td><span class="pastilla ok">' + c.masEconomico + '</span></td>' +
-      '<td><span class="pastilla neutra">' + c.masRapido + '</span></td>' +
+      '<td><span class="pastilla ok">' + c.masEconomico + '</span><br><span class="chico">Solo referencia</span></td>' +
+      '<td><span class="pastilla neutra">' + c.masRapido + '</span><br><span class="chico">Solo referencia</span></td>' +
       '<td class="chico">' + (c.ahorroSiSeLibera
         ? 'Con herramientas portatiles se ahorrarian ' + pesos(Math.abs(c.ahorroSiSeLibera))
         : '—') + '</td></tr>';
@@ -612,7 +614,8 @@ function dibujarModos() {
 
   document.getElementById('tablaModos').innerHTML =
     '<tr><th>Localidad</th>' + modos +
-    '<th>Mas economico</th><th>Mas rapido</th><th>Observacion</th></tr>' + filas;
+    '<th>Menor costo ejecutable</th><th>Menor tiempo con datos</th><th>Observación</th></tr>' + filas +
+    '<tr><td colspan="99" class="chico">Esta tabla compara alternativas por localidad. No cambia las camionetas ni los técnicos de PLAN. La decisión final se registra al agendar una orden.</td></tr>';
 }
 
 function dibujarRutas() {
@@ -693,6 +696,7 @@ function cargarPeajes() {
    ========================================================================== */
 
 function cargarOrden() {
+  dibujarAgendaTecnico();
   var codigo = document.getElementById('selectorOrden').value;
   var caja = document.getElementById('contenidoOrden');
   caja.innerHTML = '<div class="cargando"><div class="girador"></div>Generando...</div>';

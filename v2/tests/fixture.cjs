@@ -28,7 +28,7 @@ function fixture() {
     rutas[ctx.claveRuta_(o.localidad,d.localidad,true)]={ok:true,km:k+15,horas:k/85+1};
   }
   const tablas={CHECKLIST:ctx.ESQUEMA_TABLAS.CHECKLIST.filas.map(f=>({orden:f[0],item:f[1],categoria:f[2]})),FERIADOS:[]};
-  const datos={parametros,destinos,tecnicos,flota,tramos,rutas,ajustesPeaje:{},tablas,libro:{}};
+  const datos={parametros,destinos,tecnicos,flota,tramos,rutas,ajustesPeaje:{},tablas,libro:{getSheetByName:()=>null}};
   ctx.leerDatosDelLibro_=()=>datos;
   ctx.resolverRutas_=()=>({rutas,consultas:0,errores:[]});
   ctx.registrarBitacora_=()=>{};

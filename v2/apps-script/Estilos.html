@@ -294,3 +294,16 @@ input:disabled,select:disabled { background:#eef1ef; color:#52646b; }
  .contenido{max-width:none;padding:0}.tarjeta{box-shadow:none;break-inside:avoid}.tabla-envoltorio{overflow:visible}
 }
 </style>
+<style>
+.agenda-disposicion{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr);gap:20px}
+.barra-mes{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}.barra-mes h2{flex:1;margin:0;text-transform:capitalize}
+.dias-semana,.rejilla-calendario{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.dias-semana span{text-align:center;padding:10px;font-size:12px;font-weight:600;color:var(--tenue)}
+.dia-agenda{min-height:112px;text-align:left;border:1px solid var(--borde);background:white;border-radius:7px;padding:7px;cursor:pointer;overflow:hidden;font:inherit;display:flex;flex-direction:column;gap:4px}
+.dia-agenda:hover{background:#f0f7f5}.dia-agenda.otro-mes{background:#f5f6f6;color:#7c878a}.dia-agenda.seleccionado{outline:2px solid #2d7f70;outline-offset:-2px}.numero-dia{font-size:13px;font-weight:600}.es-hoy .numero-dia{background:#183d4c;color:white;border-radius:50%;width:24px;text-align:center}
+.evento-agenda{display:block;font-size:10px;line-height:1.4;padding:4px;border-radius:4px;background:#dff0e6;color:#18563b;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;width:100%}.evento-agenda.plan{background:#e2ebf3;color:#204566}
+.actividad-dia{padding:16px 0;border-bottom:1px solid var(--borde)}.actividad-dia h3{font-size:16px}.actividad-dia p{font-size:13px}.agenda-dia{max-height:800px;overflow:auto}
+.seleccion-tecnicos{display:flex;flex-wrap:wrap;gap:14px;padding:10px 0}.seleccion-tecnicos label{font-size:13px}fieldset{border:1px solid var(--borde);border-radius:8px;margin:10px 0 22px;padding:14px}legend{font-weight:600}.comparacion-agenda{margin:24px 0}.comparador-orden{min-width:690px}.comparador-orden td{vertical-align:top}.comparador-orden ul{padding-left:16px;font-size:12px}.conexion-maps{padding:16px 22px}.conexion-maps p{font-size:13px;overflow-wrap:anywhere}
+@media(max-width:1000px){.agenda-disposicion{grid-template-columns:minmax(0,1fr)}.agenda-dia{max-height:none}}
+@media(max-width:600px){.agenda-mes{padding:10px}.dia-agenda{min-height:80px;padding:4px}.evento-agenda{font-size:9px}.dias-semana span{padding:5px;font-size:10px}.barra-mes h2{font-size:17px}.barra-mes .btn{padding:7px}.rejilla-calendario{gap:2px}}
+</style>

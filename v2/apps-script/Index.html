@@ -73,6 +73,11 @@
     </div>
 
     <div id="errorGeneral" role="alert" class="error-caja oculto"></div>
+    <div class="tarjeta conexion-maps">
+      <div><h2>Rutas de Google Maps</h2><p id="estadoMaps" role="status">Revise la conexión y actualice las rutas cuando lo necesite.</p></div>
+      <div class="acciones-editor"><button class="btn btn-secundario" id="btnDiagnosticoMaps" onclick="probarMapsWeb()">Probar conexión</button><button class="btn" id="btnActualizarMaps" onclick="actualizarLoteMaps()">Actualizar Maps</button></div>
+      <details><summary>Cómo conectar Google Maps</summary><p>Sin clave: servicio nativo de Apps Script. Con clave propia: habilite Routes API y facturación en Google Cloud; en Propiedades del script defina MAPS_PROVEEDOR = ROUTES_API y GOOGLE_MAPS_API_KEY. No coloque la clave en este formulario ni en el manifiesto.</p></details>
+    </div>
 
     <div class="vista" id="vista-operacion">
       <div class="intro-vista"><div><div class="sobretitulo">CENTRO DE OPERACIONES</div><h2>Todo el recorrido, a la vista.</h2><p>Cuadrillas, vehículos y visitas del escenario seleccionado.</p></div><button class="btn btn-secundario" onclick="descargarPlan()">Descargar itinerario CSV</button></div>
@@ -108,6 +113,7 @@
 
     <!-- ---------- RESUMEN ---------- -->
     <div class="vista activa" id="vista-resumen">
+      <div class="tarjeta"><h2>Órdenes gestionadas desde la web</h2><div id="resumenAgenda">Abra Calendario para cargar las órdenes guardadas.</div><p class="ayuda">El panel inferior analiza el plan del caso. Las órdenes nuevas tienen su propio presupuesto confirmado y aparecen en el calendario.</p></div>
       <div class="rejilla rejilla-4" id="kpis"></div>
 
       <div class="tarjeta">
@@ -144,6 +150,7 @@
 
     <!-- ---------- GASTOS ---------- -->
     <div class="vista" id="vista-gastos">
+      <div class="tarjeta"><h2>Presupuesto de las órdenes agendadas</h2><div class="tabla-envoltorio"><table class="datos" id="tablaCostosAgenda"></table></div><p class="ayuda">Presupuestos guardados al decidir cada orden; no son gastos rendidos ni pagos bancarios. El desglose del plan original se muestra debajo.</p></div>
       <div class="rejilla rejilla-2">
         <div class="tarjeta">
           <h2>Composicion del gasto</h2>
@@ -204,6 +211,46 @@
 
     <!-- ---------- CALENDARIO ---------- -->
     <div class="vista" id="vista-calendario">
+      <div class="intro-vista"><div><div class="sobretitulo">AGENDA DE SERVICIOS</div><h2>Elige el día. Prepara la orden.</h2><p>Compara las alternativas y decide cómo realizar cada servicio. La agenda se guarda en Sheets.</p></div><button class="btn" onclick="nuevaOrdenAgenda()">+ Nueva orden</button></div>
+      <div id="mensajeAgenda" role="status"></div>
+      <div class="agenda-disposicion">
+        <div class="tarjeta agenda-mes"><div class="barra-mes"><button class="btn btn-secundario" aria-label="Mes anterior" onclick="moverMesAgenda(-1)">←</button><h2 id="tituloMesAgenda"></h2><button class="btn btn-secundario" aria-label="Mes siguiente" onclick="moverMesAgenda(1)">→</button><button class="btn btn-secundario" onclick="hoyAgenda()">Hoy</button><button class="btn btn-secundario" onclick="cargarAgenda()">Actualizar</button></div><div class="dias-semana"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div><div class="rejilla-calendario" id="rejillaAgenda"></div><p class="ayuda">Azul: plan del caso. Verde: órdenes guardadas. Un día puede contener varias visitas.</p></div>
+        <div class="tarjeta agenda-dia"><h2 id="tituloDiaAgenda">Selecciona una fecha</h2><div id="detalleDiaAgenda"></div></div>
+      </div>
+      <div id="formularioAgenda" class="tarjeta oculto">
+        <div class="barra-mes"><h2 id="tituloFormularioAgenda">Nueva orden de servicio</h2><button class="btn btn-secundario" onclick="cerrarFormularioAgenda()">Cerrar</button></div>
+        <form id="formOrdenAgenda" onsubmit="event.preventDefault();compararAgenda()" oninput="invalidarPreviaAgenda()" onchange="invalidarPreviaAgenda()">
+          <div class="rejilla rejilla-3">
+            <div class="campo"><label for="agendaCliente">Cliente / nombre del servicio</label><input id="agendaCliente" required maxlength="120"></div>
+            <div class="campo"><label for="agendaDireccion">Dirección exacta: calle, número, comuna, país</label><input id="agendaDireccion" required minlength="12" maxlength="500" placeholder="Av. … 123, comuna, Chile"></div>
+            <div class="campo"><label for="agendaEquipos">Equipos a instalar</label><input id="agendaEquipos" type="number" min="1" max="100" value="1" required></div>
+            <div class="campo"><label for="agendaFecha">Fecha de salida</label><input id="agendaFecha" type="date" required></div>
+            <div class="campo"><label for="agendaHora">Hora de salida desde base</label><input id="agendaHora" type="time" value="08:00" required></div>
+            <div class="campo"><label for="agendaDias">Días consecutivos de reserva</label><input id="agendaDias" type="number" min="1" max="20" value="1" required></div>
+          </div>
+          <fieldset><legend>Técnicos de la orden</legend><div id="agendaTecnicos" class="seleccion-tecnicos"></div></fieldset>
+          <div class="rejilla rejilla-3">
+            <div class="campo"><label for="agendaVehiculo">Camioneta a evaluar</label><select id="agendaVehiculo"></select></div>
+            <div class="campo"><label for="agendaConductor">Conductor (debe estar seleccionado)</label><select id="agendaConductor"></select></div>
+            <div class="campo"><label for="agendaPeajes">Peajes ida y vuelta (CLP; confirmar $0 si no hay)</label><input id="agendaPeajes" type="number" min="0" placeholder="Monto estimado o cotizado"></div>
+          </div>
+          <div class="campo"><label for="agendaHotel">Alojamiento previsto por noche (si reserva varios días)</label><input id="agendaHotel" maxlength="1000" placeholder="Nombre, dirección y noche de cada alojamiento"></div>
+          <details open><summary>Cotizar bus, avión y transporte público</summary><p class="ayuda">Pasaje ida/vuelta por técnico. Horas totales de viaje, esperas y conexiones. Conexiones y flete son montos para toda la cuadrilla. Si falta un valor, esa opción no podrá agendarse.</p>
+            <div class="tabla-envoltorio"><table class="datos"><tr><th>Alternativa</th><th>Pasaje por persona (CLP)</th><th>Horas de traslado total</th><th>Conexiones cuadrilla (CLP)</th><th>Flete cuadrilla (CLP)</th></tr>
+              <tr><th>Bus</th><td><input id="cotBusPasaje" type="number" min="0" aria-label="Pasaje bus"></td><td><input id="cotBusHoras" type="number" min="0" step="0.1" aria-label="Horas bus"></td><td><input id="cotBusConexiones" type="number" min="0" value="0" aria-label="Conexiones bus"></td><td><input id="cotBusFlete" type="number" min="0" value="0" aria-label="Flete bus"></td></tr>
+              <tr><th>Avión</th><td><input id="cotAvionPasaje" type="number" min="0" aria-label="Pasaje avión"></td><td><input id="cotAvionHoras" type="number" min="0" step="0.1" aria-label="Horas avión"></td><td><input id="cotAvionConexiones" type="number" min="0" value="0" aria-label="Conexiones avión"></td><td><input id="cotAvionFlete" type="number" min="0" value="0" aria-label="Flete avión"></td></tr>
+              <tr><th>Transporte público</th><td><input id="cotPublicoPasaje" type="number" min="0" aria-label="Pasaje transporte público"></td><td><input id="cotPublicoHoras" type="number" min="0" step="0.1" aria-label="Horas transporte público"></td><td><input id="cotPublicoConexiones" type="number" min="0" value="0" aria-label="Conexiones transporte público"></td><td><input id="cotPublicoFlete" type="number" min="0" value="0" aria-label="Flete transporte público"></td></tr>
+            </table></div>
+            <label class="checklist-item"><input id="agendaHerramientas" type="checkbox">Tenemos resuelto el traslado de equipos, materiales y herramientas sin camioneta.</label>
+          </details>
+          <div class="campo"><label for="agendaNotas">Observaciones y fuente/fecha de las cotizaciones</label><input id="agendaNotas" maxlength="1000"></div>
+          <button id="btnCompararAgenda" class="btn" type="submit">1. Calcular y comparar alternativas</button>
+        </form>
+        <div id="comparacionAgenda" class="comparacion-agenda"></div>
+        <button id="btnGuardarAgenda" class="btn btn-acento oculto" onclick="confirmarOrdenAgenda()">2. Agendar con la alternativa elegida</button>
+        <p class="ayuda">Reserva estimada desde la salida hasta el regreso a base. Las salidas de varios días reservan bloques diarios; confirme los alojamientos y paradas intermedias. No se reservan pasajes ni hoteles automáticamente.</p>
+      </div>
+      <details class="tarjeta"><summary>Ver carga del plan original y simulador de referencia</summary>
       <div class="tarjeta">
         <h2>Horas asignadas por tecnico y dia</h2>
         <p class="ayuda">Coloreado segun el semaforo de jornada.</p>
@@ -246,6 +293,7 @@
         </div>
         <div id="resultadoSimulacion" style="margin-top:16px"></div>
       </div>
+      </details>
     </div>
 
     <!-- ---------- TRANSPORTE ---------- -->
@@ -299,6 +347,7 @@
         </div>
       </div>
       <div id="contenidoOrden"></div>
+      <div class="tarjeta"><h2>Órdenes de la agenda para este técnico</h2><div id="agendaTecnicoOrden"></div></div>
     </div>
 
   </div>
@@ -307,6 +356,7 @@
 <script src="https://www.gstatic.com/charts/loader.js"></script>
 <?!= incluir_('Scripts') ?>
 <?!= incluir_('Editor') ?>
+<?!= incluir_('Agenda') ?>
 
 </body>
 </html>

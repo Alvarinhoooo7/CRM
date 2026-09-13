@@ -68,22 +68,25 @@ function validarFilasPlan_(filas, encabezados, datos) {
     numeros[n] = true;
     if (!/^D[1-9]\d*$/.test(dia) || Number(dia.slice(1)) > datos.parametros.P_HORIZONTE_MAX_DIAS) throw new Error('Día fuera del horizonte.');
     if (!cuadrilla || locs.indexOf(f[5]) < 0 || locs.indexOf(f[6]) < 0) throw new Error('Complete cuadrilla, origen y destino.');
-    if (f[3] !== 'Camioneta') throw new Error('El editor operativo admite camionetas. Bus y avión se comparan como alternativas referenciales.');
-    if (!flota[f[4]] || flota[f[4]].estado !== 'Disponible') throw new Error('Vehículo no disponible.');
+    var modo = String(f[3] || 'Camioneta');
+    if (['Camioneta','Bus','Avion','Transporte publico'].indexOf(modo) < 0) throw new Error('Modo de transporte no permitido.');
+    if (modo === 'Camioneta' && (!flota[f[4]] || flota[f[4]].estado !== 'Disponible')) throw new Error('Vehículo no disponible.');
     if (!Number.isInteger(noches) || noches < 0 || noches > 1) throw new Error('Cada tramo admite 0 o 1 noche; use un tramo por día.');
     var checks = encabezados.slice(9).map(function (c, j) { return f[j + 9] === true; });
     var tecnicos = encabezados.slice(9).filter(function (c, j) { return checks[j]; });
     if (!tecnicos.length || tecnicos.some(function (c) { return !activos[c]; })) throw new Error('Seleccione técnicos activos.');
-    if (tecnicos.indexOf(conductor) < 0 || activos[conductor].licencia !== 'Si') throw new Error('El conductor debe estar asignado y tener licencia.');
+    if (modo === 'Camioneta' && (tecnicos.indexOf(conductor) < 0 || activos[conductor].licencia !== 'Si')) throw new Error('El conductor debe estar asignado y tener licencia.');
     tecnicos.forEach(function (c) {
       var key = dia + '|' + c;
       if (usos[key] && usos[key] !== cuadrilla) throw new Error(c + ' está en dos cuadrillas el mismo día.');
       usos[key] = cuadrilla;
     });
-    var key = dia + '|' + f[4];
-    if (vehiculos[key] && vehiculos[key] !== cuadrilla) throw new Error('La camioneta está en dos cuadrillas el mismo día.');
-    vehiculos[key] = cuadrilla;
-    return [n, dia, cuadrilla, 'Camioneta', f[4], f[5], f[6], noches, conductor].concat(checks);
+    if (modo === 'Camioneta') {
+      var key = dia + '|' + f[4];
+      if (vehiculos[key] && vehiculos[key] !== cuadrilla) throw new Error('La camioneta está en dos cuadrillas el mismo día.');
+      vehiculos[key] = cuadrilla;
+    }
+    return [n, dia, cuadrilla, modo, modo === 'Camioneta' ? f[4] : '—', f[5], f[6], noches, modo === 'Camioneta' ? conductor : '—'].concat(checks);
   });
   normalizadas.sort(function (a,b) { return Number(a[1].slice(1))-Number(b[1].slice(1)) || a[2].localeCompare(b[2]) || a[0]-b[0]; });
   normalizadas.forEach(function (f) {

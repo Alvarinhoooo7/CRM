@@ -593,19 +593,17 @@ var ESQUEMA_CONFIG = [
   },
 
   {
-    seccion: 'MODOS DE TRANSPORTE · se elige el mas barato, no el habitual',
+    seccion: 'MODOS DE TRANSPORTE · comparar y decidir manualmente',
     parametros: [
       { clave: 'P_PERMITE_BUS', etiqueta: 'Bus interurbano habilitado',
         valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
         validacion: { valores: [true, false] },
-        nota: 'DECISION DE JEFATURA: si el bus sale mas barato que la camioneta para ese ' +
-              'destino, se va en bus. Es un modo ejecutable del plan, no una simulacion.' },
+        nota: 'Se ofrece como alternativa para comparar. Solo se usa si coordinación la selecciona en una orden y confirma pasajes, conexiones y herramientas.' },
 
       { clave: 'P_PERMITE_AVION', etiqueta: 'Avion habilitado',
         valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA', critico: true,
         validacion: { valores: [true, false] },
-        nota: 'Mismo criterio. En destinos como Copiapo el avion puede ganar: ahorra dos ' +
-              'dias de viatico, dos noches de hotel y el desgaste de 1.600 km.' },
+        nota: 'Alternativa referencial. La coordinación debe confirmar vuelo, conexiones, herramientas y alojamiento antes de seleccionarla.' },
 
       { clave: 'P_PERMITE_TRANSPORTE_PUBLICO', etiqueta: 'Metro y micro habilitados',
         valor: true, unidad: 'si/no', tipo: 'lista', fuente: 'JEFATURA',
@@ -793,10 +791,7 @@ var ESQUEMA_TABLAS = {
     columnas: ['Localidad', 'Pasaje bus ($)', 'Horas bus', 'Pasaje avion ($)',
                'Horas vuelo', 'Aeropuerto o terminal', 'Vigencia'],
     tipos: ['texto', 'moneda', 'numero', 'moneda', 'numero', 'texto', 'texto'],
-    nota: 'Bus y avion son modos EJECUTABLES: si salen mas baratos que la camioneta ' +
-          'para ese destino, el plan los usa. Las horas de vuelo no incluyen el ' +
-          'check-in, que se agrega con P_CHECKIN_AEROPUERTO_H. Valores referenciales: ' +
-          'cotizar antes de comprometer el plan.',
+    nota: 'Bus y avión son alternativas para evaluar. El plan de referencia usa camionetas; ninguna opción se selecciona automáticamente. Las horas de vuelo no incluyen el check-in. Cotizar antes de comprometer.',
     filas: [
       ['Maipu',                    0,    0,     0,   0,  'No aplica',              ''],
       ['Pudahuel',                 0,    0,     0,   0,  'No aplica',              ''],

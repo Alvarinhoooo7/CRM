@@ -34,7 +34,7 @@ test('El editor rechaza conductor sin licencia, ruta rota y doble vehículo',()=
 });
 test('Texto de celdas no admite fórmulas',()=>assert.throws(()=>ctx.textoCelda_('=IMPORTXML("url")')));
 test('Las funciones internas no quedan expuestas por RPC',()=>{
- const permitidas=new Set('doGet onOpen iniciarSesion cerrarSesion obtenerTablero recalcular actualizarRutas simularTrabajo obtenerOrdenServicio guardarParametro obtenerEsquemaConfig obtenerCatalogoPeajes exportarOrdenDesdeApi obtenerEditor guardarDestino guardarPlanWeb configurarAcceso'.split(' '));
+ const permitidas=new Set('doGet onOpen iniciarSesion cerrarSesion obtenerTablero recalcular actualizarRutas actualizarMapsWeb diagnosticarMaps simularTrabajo obtenerOrdenServicio guardarParametro obtenerEsquemaConfig obtenerCatalogoPeajes exportarOrdenDesdeApi obtenerEditor guardarDestino guardarPlanWeb obtenerAgenda previsualizarOrden guardarOrdenAgenda cambiarEstadoAgenda configurarAcceso'.split(' '));
  for(const f of fs.readdirSync(root).filter(f=>f.endsWith('.gs'))) for(const m of fs.readFileSync(path.join(root,f),'utf8').matchAll(/^function (\w+)\(/gm)) assert.ok(m[1].endsWith('_')||permitidas.has(m[1]),m[1]);
 });
 test('Técnicos se leen por encabezado aun con columnas reordenadas',()=>{
@@ -45,5 +45,17 @@ test('Técnicos se leen por encabezado aun con columnas reordenadas',()=>{
  assert.throws(()=>ctx.leerPlan_(libro,datos.tecnicos.filter(t=>t.codigo!=='T01')),/inactivo/);
 });
 test('Sin datos de Maps el plan informa respaldo',()=>{const r=ctx.calcularPlan_({...datos,rutas:{}},'LITERAL_PDF');assert.ok(r.alertas.some(a=>a.id==='RUTA_SIN_MAPS'));});
+test('Agenda compara alternativas sin escoger por el usuario',()=>{
+ const s=ctx.normalizarSolicitudAgenda_({cliente:'Cliente demo',direccion:'Calle 123, Macul, Chile',equipos:2,fecha:'2026-09-21',hora:'08:00',dias:1,tecnicos:['T01','T02','T03'],vehiculo:'V1',conductor:'T01',peajes:4000,hotel:'',herramientas:true,notas:'',bus:{pasaje:12000,horas:4,conexiones:0,flete:0},avion:{pasaje:80000,horas:2,conexiones:0,flete:0},publico:{pasaje:3000,horas:5,conexiones:0,flete:0}},datos);
+ const ida={ok:true,km:30,horas:0.5},vuelta={ok:true,km:30,horas:0.5};
+ const opts=ctx.compararOrdenAgenda_(s,datos,ida,vuelta);
+ assert.equal(JSON.stringify(opts.map(o=>o.modo)),JSON.stringify(['Camioneta','Bus','Avion','Transporte publico']));
+ assert.ok(opts.every(o=>Number.isFinite(o.total)&&o.horasTotales>0));
+ assert.equal(opts[0].transferencias.length,3);
+});
+test('El editor conserva el modo escogido y solo exige vehículo al usar camioneta',()=>{
+ let f=filas();f[0][3]='Bus';f[0][4]='—';f[0][8]='—';f[1][3]='Bus';f[1][4]='—';f[1][8]='—';
+ const r=ctx.validarFilasPlan_(f,cab,datos);assert.equal(r[0][3],'Bus');assert.equal(r[0][4],'—');
+});
 console.log(`${checks} comprobaciones completadas. Datos de ruta sintéticos; no validan Google ni precios reales.`);
 if(process.argv.includes('--fixture'))fs.writeFileSync(path.join(__dirname,'payload.local.json'),JSON.stringify(payload(),null,2));

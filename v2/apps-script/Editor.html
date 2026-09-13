@@ -48,7 +48,7 @@ function dibujarEditorPlan() {
     return '<tr>' + cab.map(function (c,j) {
       var attr = ' aria-label="' + escapar(c) + ', tramo ' + (i+1) + '" data-fila="' + i + '" data-col="' + j + '" onchange="editarCelda(this)"';
       if (j >= 9) return '<td><input type="checkbox"' + attr + (f[j] === true ? ' checked' : '') + '></td>';
-      var lista = j === 1 ? dias : j === 3 ? ['Camioneta'] : j === 4 ? vehiculos : (j===5 || j===6) ? lugares : j===8 ? conductores : null;
+      var lista = j === 1 ? dias : j === 3 ? ['Camioneta','Bus','Avion','Transporte publico'] : j === 4 ? ['—'].concat(vehiculos) : (j===5 || j===6) ? lugares : j===8 ? ['—'].concat(conductores) : null;
       if (lista) return '<td><select' + attr + '>' + opcionesEditor(lista, f[j]) + '</select></td>';
       return '<td><input' + attr + ' type="' + (j===0 || j===7 ? 'number' : 'text') + '" value="' + escapar(f[j]) + '"' + (j===7 ? ' min="0" max="1"' : '') + '></td>';
     }).join('') + '<td><button class="btn btn-secundario" onclick="quitarTramo(' + i + ')" aria-label="Quitar tramo ' + (i+1) + '">Quitar</button></td></tr>';

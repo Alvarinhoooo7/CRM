@@ -16,7 +16,16 @@ const SALIDA = path.join(__dirname, 'csv');
  * ========================================================================== */
 const P = {
   HOTEL: 50000,             // $/noche/persona          JEFATURA
-  VIATICO: 25000,           // $/dia/tecnico            JEFATURA (incluye colacion)
+  VIATICO: 25000,           // $/dia/tecnico desplegado JEFATURA
+  // REGLA DE JEFATURA: el viatico existe para cubrir al que esta lejos y no
+  // puede volver. Quien trabaja en la RM almuerza fuera pero duerme en su
+  // casa: se le paga colacion, no viatico.
+  COLACION_RM: 5000,        // $/dia                    JEFATURA
+  VIATICO_SOLO_CON_PERNOCTACION: true,  //              JEFATURA
+  HOLGURA_IMPREVISTOS: 0.10,  // el "y otros" del PDF   JEFATURA
+  REDONDEO_TRANSFERENCIA: 1000,  // $                   JEFATURA
+  COSTO_KM: 60,             // $/km desgaste y mantencion JEFATURA
+  COSTO_TECNICO_MES: 1400000,  // $/mes                 SUPUESTO
   DIESEL: 1381,             // $/L                      JEFATURA
   RENDIMIENTO: 20,          // km/L                     PDF
   HORAS_EQUIPO: 2,          // h por equipo             PDF
@@ -159,6 +168,14 @@ function peajeEntre(a, b) {
 function tandas(loc, n) { return Math.ceil(dest[loc].equipos / n); }
 function horasTrabajo(loc, n) { return tandas(loc, n) * HORAS_POR_EQUIPO; }
 function r2(x) { return Math.round(x * 100) / 100; }
+/* PDF: la transferencia cubre "estadia, colacion, peajes y otros". La holgura
+ * del 10% es ese "y otros"; despues se redondea hacia arriba al millar para
+ * que el tecnico reciba una cifra manejable en efectivo. */
+function redondearTransferencia(monto) {
+  if (!monto) { return 0; }
+  const conHolgura = monto * (1 + P.HOLGURA_IMPREVISTOS);
+  return Math.ceil(conHolgura / P.REDONDEO_TRANSFERENCIA) * P.REDONDEO_TRANSFERENCIA;
+}
 function fechaDe(dia) {
   const f = new Date(FECHA_INICIO.getTime() + (dia - 1) * 86400000);
   return f.toISOString().slice(0, 10);
@@ -264,6 +281,19 @@ let n = 0;
 CUADRILLAS.forEach(function (cuad) {
   const jornadas = planificar(cuad);
   const nTec = cuad.tecnicos.length;
+  // El viatico se paga por VIAJE con pernoctacion, no por dia suelto: si la
+  // cuadrilla duerme fuera alguna noche, todos sus dias son dias de viatico.
+  const viajeConPernoctacion = jornadas.some(function (x) { return x.pernocta; });
+
+  /* Devuelve el estipendio del dia para un tecnico: viatico si esta fuera de
+   * la RM en un viaje con pernoctacion; colacion si vuelve a dormir a su casa. */
+  function estipendio(enRM) {
+    const fuera = enRM !== 'Si';
+    if (fuera && (!P.VIATICO_SOLO_CON_PERNOCTACION || viajeConPernoctacion)) {
+      return { monto: P.VIATICO, tipo: 'Viatico' };
+    }
+    return { monto: P.COLACION_RM, tipo: 'Colacion' };
+  }
 
   jornadas.forEach(function (j, idx) {
     // Conductor alternado: cambia cada dia, y los dos tienen licencia.
@@ -298,12 +328,14 @@ CUADRILLAS.forEach(function (cuad) {
           Hotel_Zona: j.pernocta ? (dest[j.lugar] || {}).zonaHotel || '' : 'No aplica',
           Hotel_Direccion: j.pernocta ? j.lugar + ', Chile' : '',
           Km_Ida: 0, Km_Dia: j.km,
-          Viatico: P.VIATICO, Hotel_Monto: (j.pernocta ? 1 : 0) * P.HOTEL,
+          Viatico: estipendio('No').monto, Tipo_Estipendio: estipendio('No').tipo,
+          Hotel_Monto: (j.pernocta ? 1 : 0) * P.HOTEL,
           Peaje: esConductor ? j.peaje : 0,
           Combustible: esConductor ? Math.round(j.km / P.RENDIMIENTO * P.DIESEL) : 0,
           Gastos_Extra: 0,
-          Total_Transferencia: P.VIATICO + (j.pernocta ? 1 : 0) * P.HOTEL +
-            (esConductor ? j.peaje + Math.round(j.km / P.RENDIMIENTO * P.DIESEL) : 0),
+          Total_Transferencia: redondearTransferencia(
+            estipendio('No').monto + (j.pernocta ? 1 : 0) * P.HOTEL +
+            (esConductor ? j.peaje + Math.round(j.km / P.RENDIMIENTO * P.DIESEL) : 0)),
           Estado: 'Pendiente',
           Observaciones: j.regreso ? 'Dia de regreso, sin instalacion'
                                    : 'Dia de traslado, sin instalacion',
@@ -327,15 +359,16 @@ CUADRILLAS.forEach(function (cuad) {
         const esConductor = tec === conductor;
         const primeroDelDia = loc === j.sitios[0];
         // Viatico una vez por tecnico y por dia, no por orden.
-        const viatico = primeroDelDia ? P.VIATICO : 0;
+        const est = estipendio(d.rm);
+        const viatico = primeroDelDia ? est.monto : 0;
         const noches = (primeroDelDia && j.pernocta) ? 1 : 0;
         const hotelMonto = noches * P.HOTEL;
         const extra = primeroDelDia ? j.extra : 0;
         const costoExtra = Math.round(extra * COSTO_HORA_EXTRA);
         // Solo la primera orden del dia lleva el costo del vehiculo.
         const cargaVehiculo = esConductor && primeroDelDia;
-        const transferencia = viatico + hotelMonto +
-          (cargaVehiculo ? peajeDia + combustibleDia : 0);
+        const transferencia = redondearTransferencia(viatico + hotelMonto +
+          (cargaVehiculo ? peajeDia + combustibleDia : 0));
 
         ordenes.push({
           ID: id,
@@ -353,7 +386,8 @@ CUADRILLAS.forEach(function (cuad) {
           Hotel_Zona: noches > 0 ? (dest[j.lugar] || d).zonaHotel : 'No aplica',
           Hotel_Direccion: noches > 0 ? j.lugar + ', Chile' : '',
           Km_Ida: kmEntre('BASE', loc), Km_Dia: j.km,
-          Viatico: viatico, Hotel_Monto: hotelMonto,
+          Viatico: viatico, Tipo_Estipendio: primeroDelDia ? est.tipo : '',
+          Hotel_Monto: hotelMonto,
           Peaje: cargaVehiculo ? peajeDia : 0,
           Combustible: cargaVehiculo ? combustibleDia : 0,
           Gastos_Extra: 0,
@@ -461,17 +495,32 @@ console.log('Camionetas usadas       ' + CUADRILLAS.length + ' de ' + FLOTA.leng
 console.log('Duracion del plan       ' + diasPlan + ' dias habiles');
 console.log('Ordenes de trabajo      ' + ordenes.length);
 
-console.log('\n=== DINERO ===');
-console.log('Viaticos    ' + String(tecnicoDias).padStart(3) + ' tecnico-dias   $' +
-  (tecnicoDias * P.VIATICO).toLocaleString('es-CL'));
-console.log('Hotel       ' + String(tecnicoNoches).padStart(3) + ' tecnico-noches $' +
-  (tecnicoNoches * P.HOTEL).toLocaleString('es-CL'));
-console.log('Peajes                      $' + peajes.toLocaleString('es-CL'));
-console.log('Combustible                 $' + comb.toLocaleString('es-CL'));
-console.log('TOTAL A TRANSFERIR          $' + total.toLocaleString('es-CL'));
-console.log('Horas extra (costo empresa, NO se transfiere)  $' +
-  extraTotal.toLocaleString('es-CL'));
+const nViatico = ordenes.filter(function (o) { return o.Tipo_Estipendio === 'Viatico'; }).length;
+const nColacion = ordenes.filter(function (o) { return o.Tipo_Estipendio === 'Colacion'; }).length;
+const sumaEst = ordenes.reduce(function (s, o) { return s + o.Viatico; }, 0);
+const kmTotales = bitacoraJornadas.reduce(function (s, b) { return s + (b.j.km || 0); }, 0);
+const desgaste = kmTotales * P.COSTO_KM;
+const subtotal = sumaEst + tecnicoNoches * P.HOTEL + peajes + comb;
 
+console.log('\n=== DINERO ===');
+console.log('Viatico fuera de la RM  ' + String(nViatico).padStart(3) + ' tec-dias x $' +
+  P.VIATICO.toLocaleString('es-CL') + '  = $' + (nViatico * P.VIATICO).toLocaleString('es-CL'));
+console.log('Colacion en la RM       ' + String(nColacion).padStart(3) + ' tec-dias x $' +
+  P.COLACION_RM.toLocaleString('es-CL') + '   = $' +
+  (nColacion * P.COLACION_RM).toLocaleString('es-CL'));
+console.log('Alojamiento             ' + String(tecnicoNoches).padStart(3) + ' tec-noches x $' +
+  P.HOTEL.toLocaleString('es-CL') + ' = $' + (tecnicoNoches * P.HOTEL).toLocaleString('es-CL'));
+console.log('Peajes                                      $' + peajes.toLocaleString('es-CL'));
+console.log('Combustible   ' + kmTotales.toLocaleString('es-CL') +
+  ' km / 20 km/L x $1.381    = $' + comb.toLocaleString('es-CL'));
+console.log('                                            ----------');
+console.log('Subtotal                                    $' + subtotal.toLocaleString('es-CL'));
+console.log('+ holgura 10% imprevistos, redondeo al millar');
+console.log('TOTAL A TRANSFERIR                          $' + total.toLocaleString('es-CL'));
+console.log('\nCostos de empresa, NO se transfieren:');
+console.log('  Horas extra                               $' + extraTotal.toLocaleString('es-CL'));
+console.log('  Desgaste  ' + kmTotales.toLocaleString('es-CL') + ' km x $' + P.COSTO_KM +
+  '                   = $' + desgaste.toLocaleString('es-CL'));
 console.log('\n=== HORAS EXTRA vs HOSTAL ===');
 console.log('2 h extra para 2 tecnicos:  2 x 2 x $' + COSTO_HORA_EXTRA.toLocaleString('es-CL') +
   ' = $' + (2 * 2 * COSTO_HORA_EXTRA).toLocaleString('es-CL'));
@@ -538,3 +587,96 @@ console.log('Viatico + hotel      $' + base.plata.toLocaleString('es-CL').padSta
   '   $' + (alt.plata - base.plata).toLocaleString('es-CL').padStart(10));
 console.log('Horas extra          $' + base.extra.toLocaleString('es-CL').padStart(9) +
   '   $' + alt.extra.toLocaleString('es-CL').padStart(12));
+
+/* ==========================================================================
+ * J. DOTACION POR SITIO
+ * --------------------------------------------------------------------------
+ * El tamano de cuadrilla NO lo fija el PDF, asi que hay que sustentarlo.
+ * Los diez tecnicos tienen licencia: se puede mandar cualquier dotacion a
+ * cualquier punto. Lo que decide es el costo.
+ * ========================================================================== */
+console.log('\n=== CONVIENE MANDAR MAS GENTE A UN SITIO? ===');
+console.log('Sitio            Eq   con 2   con n  ahorra      movil+  estipendio+      TOTAL+   vale');
+let hubo = false;
+DESTINOS.forEach(function (d) {
+  const loc = d[0], eq = d[4], km = d[6], peajeIda = d[7], enRM = d[3];
+  if (eq <= P.CAPACIDAD_CAMIONETA) { return; }
+  hubo = true;
+  /* Dias que la cuadrilla que atiende este sitio pasa desplegada, y si duerme
+   * fuera: de ahi sale lo que costaria cada tecnico adicional. En la RM es
+   * colacion, no viatico, porque el tecnico vuelve a dormir a su casa. */
+  const cuad = CUADRILLAS.filter(function (c) { return c.ruta.indexOf(loc) >= 0; })[0];
+  const js = bitacoraJornadas.filter(function (b) { return b.cuadrilla === cuad.id; });
+  const dias = js.length;
+  const duermeFuera = js.some(function (b) { return b.j.pernocta; });
+  const porDia = (enRM !== 'Si' && duermeFuera) ? P.VIATICO : P.COLACION_RM;
+  const noches = js.filter(function (b) { return b.j.pernocta; }).length;
+
+  const conBase = Math.ceil(eq / P.CAPACIDAD_CAMIONETA) * HORAS_POR_EQUIPO;
+  const movilesExtra = Math.ceil(eq / P.CAPACIDAD_CAMIONETA) - 1;
+  const extraMovil = movilesExtra *
+    (Math.round(km * 2 / P.RENDIMIENTO * P.DIESEL) + peajeIda * 2);
+  const nExtra = eq - P.CAPACIDAD_CAMIONETA;
+  const extraGente = nExtra * (dias * porDia + noches * P.HOTEL);
+  const totalExtra = extraMovil + extraGente;
+  /* P_VALORA_TIEMPO_TECNICO = 'Solo si genera sobretiempo'. Ahorrar horas de
+   * una jornada que ya cabe en las 8,4 h ordinarias NO ahorra dinero: el
+   * tecnico esta contratado igual y simplemente vuelve antes. Solo valen las
+   * horas que hoy se pagan como extra. */
+  const jornadaDelSitio = Math.max.apply(null, js.map(function (b) {
+    return b.j.sitios.indexOf(loc) >= 0 ? b.j.horas : 0; }));
+  const extraDelSitio = Math.max(0, jornadaDelSitio - P.JORNADA_DIA);
+  const horasQueValen = Math.min(conBase - HORAS_POR_EQUIPO, extraDelSitio);
+  const valorAhorro = Math.round(horasQueValen * P.CAPACIDAD_CAMIONETA * COSTO_HORA_EXTRA);
+
+  console.log(loc.padEnd(16) + String(eq).padStart(3) +
+    String(conBase).padStart(7) + 'h' + String(HORAS_POR_EQUIPO).padStart(7) + 'h' +
+    String(r2(conBase - HORAS_POR_EQUIPO)).padStart(7) + 'h' +
+    ('$' + extraMovil.toLocaleString('es-CL')).padStart(12) +
+    ('$' + extraGente.toLocaleString('es-CL')).padStart(13) +
+    ('$' + totalExtra.toLocaleString('es-CL')).padStart(12) +
+    ('  $' + valorAhorro.toLocaleString('es-CL')) +
+    (jornadaDelSitio <= P.JORNADA_DIA ? '  (jornada de ' + jornadaDelSitio +
+      'h, no genera sobretiempo)' : ''));
+});
+if (!hubo) { console.log('Ningun sitio supera la capacidad del vehiculo.'); }
+console.log('');
+console.log('Ninguna jornada de estos sitios pasa de las 8,4 h ordinarias, asi que las');
+console.log('horas ahorradas no valen dinero: el tecnico vuelve antes, nada mas. El');
+console.log('sobrecosto, en cambio, es real y se paga.');
+console.log('Por eso la cuadrilla es de ' + P.CAPACIDAD_CAMIONETA + ' y no mas.');
+console.log('\n=== CONTRATAR: COSTO VARIABLE vs COSTO FIJO ===');
+console.log('Ahorro por despliegue: 1 dia, con sobrecosto de $' +
+  (alt.plata - base.plata + alt.extra - base.extra).toLocaleString('es-CL'));
+console.log('Costo fijo de 2 tecnicos: 2 x $' + P.COSTO_TECNICO_MES.toLocaleString('es-CL') +
+  ' = $' + (2 * P.COSTO_TECNICO_MES).toLocaleString('es-CL') + ' al mes');
+console.log('Decide la FRECUENCIA de despliegues, no el ahorro por viaje.');
+
+/* ==========================================================================
+ * K. QUE MONTO REQUIERE CADA TECNICO
+ * --------------------------------------------------------------------------
+ * Es la pregunta textual del enunciado. El rango lo explican, en orden: las
+ * noches fuera, si trabajo fuera de la RM, y si le toco conducir.
+ * ========================================================================== */
+console.log('\n=== QUE MONTO REQUIERE CADA TECNICO ===');
+console.log('Tec  Nombre             Dias Noch Conduce   Viat/Col     Hotel     Peaje      Comb      TOTAL');
+const porTec = {};
+ordenes.forEach(function (o) {
+  const t = porTec[o.Tecnico] || (porTec[o.Tecnico] = {
+    v: 0, h: 0, p: 0, c: 0, t: 0, n: 0, dias: {}, cond: {} });
+  t.v += o.Viatico; t.h += o.Hotel_Monto; t.p += o.Peaje;
+  t.c += o.Combustible; t.t += o.Total_Transferencia; t.n += o.Noches;
+  t.dias[o.Fecha] = true;
+  if (o.Conductor === 'Si') { t.cond[o.Dia] = true; }
+});
+const pesos = function (n) { return ('$' + n.toLocaleString('es-CL')).padStart(10); };
+TECNICOS.forEach(function (tec) {
+  const t = porTec[tec[0]];
+  if (!t) { return; }
+  console.log(tec[0] + '  ' + tec[1].padEnd(18) +
+    String(Object.keys(t.dias).length).padStart(3) +
+    String(t.n).padStart(5) + '  ' +
+    Object.keys(t.cond).sort().join(',').padEnd(8) +
+    pesos(t.v) + pesos(t.h) + pesos(t.p) + pesos(t.c) + pesos(t.t));
+});
+console.log(' '.repeat(59) + 'TOTAL' + pesos(total));

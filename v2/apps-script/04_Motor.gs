@@ -1040,6 +1040,106 @@ function alerta_(id, nivel, mensaje) {
 }
 
 /**
+ * Busca la forma MAS BARATA de repartir un viaje completo en dias.
+ *
+ * Esta es la funcion que hace que el sistema elija de verdad la opcion mas
+ * economica, y no la mas comoda. El mismo viaje se puede hacer de varias
+ * formas y cada una cuesta distinto:
+ *
+ *   · Apretar todo en un dia    -> se pagan horas extra con 50% de recargo,
+ *                                  pero no se paga hotel ni el viatico del
+ *                                  dia siguiente.
+ *   · Repartirlo en dos dias    -> no hay horas extra, pero hay que pagar
+ *                                  noche de hotel para toda la cuadrilla y un
+ *                                  viatico mas por persona.
+ *
+ * Con tres tecnicos, dos horas extra cuestan $58.500 y una noche cuesta
+ * $225.000 entre hotel y viatico. Por eso muchas veces conviene que el equipo
+ * se quede hasta tarde, termine el trabajo y se devuelva, en vez de dormir
+ * afuera. Lo mismo aplica a volar: a veces sale mas barato mandarlos en avion,
+ * que trabajen con sobretiempo y tomen el vuelo de vuelta, que mandarlos en
+ * camioneta dos dias.
+ *
+ * El unico limite que no se cruza es el legal: jornada contractual mas el
+ * maximo de horas extra permitidas. Sobre eso la alternativa se descarta,
+ * cueste lo que cueste.
+ *
+ * @param {number} horasTotales   viaje de ida y vuelta mas trabajo en el sitio
+ * @param {number} nTecnicos      integrantes de la cuadrilla
+ * @param {number} costoTransporte costo del transporte, que no depende de los dias
+ * @param {number} costoPorDia    costos que se repiten cada dia, como el arriendo
+ * @param {Object} p              parametros resueltos
+ * @return {{mejor:Object, alternativas:Array}}
+ */
+function mejorProgramacion_(horasTotales, nTecnicos, costoTransporte, costoPorDia, p) {
+  var jornadaNormal = p.P_JORNADA_DIA_MAX;
+  var extraMax = p.P_PERMITE_HORAS_EXTRA ? p.P_HORAS_EXTRA_MAX_DIA : 0;
+  var topeLegalDia = jornadaNormal + extraMax;
+
+  var personas = p.P_HABITACION_INDIVIDUAL ? nTecnicos : Math.ceil(nTecnicos / 2);
+  var costoHoraExtra = p.P_COSTO_HORA_TECNICO * p.P_RECARGO_HORA_EXTRA;
+
+  var alternativas = [];
+  var mejor = null;
+
+  // Se prueba desde apretar todo en un dia hasta repartirlo con holgura.
+  var maxDias = Math.max(1, Math.ceil(horasTotales / Math.max(0.5, jornadaNormal)) + 1);
+
+  for (var dias = 1; dias <= maxDias; dias++) {
+    // No cabe ni usando todas las horas extra legales: alternativa invalida.
+    if (horasTotales > dias * topeLegalDia + 1e-9) continue;
+
+    var horasExtra = Math.max(0, horasTotales - dias * jornadaNormal);
+    if (horasExtra > dias * extraMax + 1e-9) continue;
+
+    var noches = dias - 1;
+    var hotel = noches * personas * p.P_HOTEL;
+    var viatico = dias * nTecnicos * p.P_VIATICO;
+    var sobretiempo = horasExtra * nTecnicos * costoHoraExtra;
+    var porDia = (costoPorDia || 0) * dias;
+
+    var opcion = {
+      dias: dias,
+      noches: noches,
+      horasExtra: redondear_(horasExtra, 2),
+      hotel: Math.round(hotel),
+      viatico: Math.round(viatico),
+      sobretiempo: Math.round(sobretiempo),
+      costoPorDia: Math.round(porDia),
+      total: Math.round(costoTransporte + hotel + viatico + sobretiempo + porDia),
+      etiqueta: (dias === 1)
+        ? 'Ida y vuelta el mismo dia'
+        : (dias === 2 ? 'Con una noche fuera' : 'Con ' + noches + ' noches fuera')
+    };
+
+    alternativas.push(opcion);
+    if (!mejor || opcion.total < mejor.total) mejor = opcion;
+  }
+
+  // Si nada calza dentro de la ley, se devuelve la reparticion minima viable
+  // para que el plan siga mostrando un numero y la validacion lo marque.
+  if (!mejor) {
+    var diasMinimos = Math.max(1, Math.ceil(horasTotales / Math.max(0.5, topeLegalDia)));
+    mejor = {
+      dias: diasMinimos, noches: diasMinimos - 1, horasExtra: 0,
+      hotel: Math.round((diasMinimos - 1) * personas * p.P_HOTEL),
+      viatico: Math.round(diasMinimos * nTecnicos * p.P_VIATICO),
+      sobretiempo: 0, costoPorDia: Math.round((costoPorDia || 0) * diasMinimos),
+      total: 0, etiqueta: 'Sin reparticion legal posible'
+    };
+    mejor.total = Math.round(costoTransporte + mejor.hotel + mejor.viatico + mejor.costoPorDia);
+    alternativas.push(mejor);
+  }
+
+  // Cuanto se ahorra con la mejor frente a la siguiente: es el argumento.
+  var ordenadas = alternativas.slice().sort(function (a, b) { return a.total - b.total; });
+  mejor.ahorroFrenteASiguiente = (ordenadas.length > 1)
+    ? ordenadas[1].total - ordenadas[0].total : 0;
+
+  return { mejor: mejor, alternativas: ordenadas };
+}
+
+/**
  * Cuenta cuanta gente llega a cada sitio en cada dia, sumando TODAS las
  * cuadrillas que coinciden ahi.
  *
@@ -1132,26 +1232,37 @@ function compararModos_(destino, nTecnicos, ctx) {
   var sitio = horasEnSitio_(d.equipos || 0, nTecnicos, true, p);
   var topeDia = p.P_JORNADA_DIA_MAX + (p.P_PERMITE_HORAS_EXTRA ? p.P_HORAS_EXTRA_MAX_DIA : 0);
 
-  var evaluar = function (nombre, horasIdaModo, costoTransporte, aplicable, nota, desglose) {
-    var dias = Math.max(1, Math.ceil((2 * horasIdaModo + sitio.total) / topeDia));
-    var noches = dias - 1;
-    var personas = p.P_HABITACION_INDIVIDUAL ? nTecnicos : Math.ceil(nTecnicos / 2);
-    var hotel = noches * personas * p.P_HOTEL;
-    var viatico = dias * nTecnicos * p.P_VIATICO;
+  var evaluar = function (nombre, horasIdaModo, costoTransporte, aplicable, nota,
+                          desglose, costoPorDia) {
+    // Se prueban todas las formas legales de repartir el viaje en dias y se
+    // toma la mas barata, costeando las horas extra contra el hotel. Un dia
+    // apretado con sobretiempo puede salir mucho mas barato que dormir afuera.
+    var horasTotales = 2 * horasIdaModo + sitio.total;
+    var prog = mejorProgramacion_(horasTotales, nTecnicos, costoTransporte,
+                                  costoPorDia || 0, p);
+    var m = prog.mejor;
+
     return {
       modo: nombre,
       aplicable: aplicable,
       nota: nota || '',
-      dias: dias, noches: noches,
+      dias: m.dias,
+      noches: m.noches,
       horasIda: redondear_(horasIdaModo, 2),
+      horasTotales: redondear_(horasTotales, 2),
+      horasExtra: m.horasExtra,
+      sobretiempo: m.sobretiempo,
+      programacion: m.etiqueta,
+      alternativasDia: prog.alternativas,
+      ahorroProgramacion: m.ahorroFrenteASiguiente,
       // Desglose en lenguaje comun, para que cualquiera entienda de donde sale
       // el numero sin tener que leer el codigo.
       desgloseTiempo: desglose || [],
       desgloseCosto: [],
-      transporte: Math.round(costoTransporte),
-      hotel: Math.round(hotel),
-      viatico: Math.round(viatico),
-      total: Math.round(costoTransporte + hotel + viatico)
+      transporte: Math.round(costoTransporte + m.costoPorDia),
+      hotel: m.hotel,
+      viatico: m.viatico,
+      total: m.total
     };
   };
 
@@ -1188,8 +1299,11 @@ function compararModos_(destino, nTecnicos, ctx) {
     // el traslado desde el terminal hasta el sitio.
     var horasBus = (d.horasBus || 0) + p.P_TIEMPO_A_AEROPUERTO_H;
 
+    // El arriendo en destino se cobra por dia, asi que no va en el costo fijo:
+    // se le pasa al buscador de programacion para que lo multiplique por los
+    // dias que termine eligiendo.
     var costoBus = 2 * tb * nTecnicos + 2 * p.P_FLETE_HERRAMIENTAS +
-                   2 * p.P_TRASLADO_AEROPUERTO + p.P_ARRIENDO;
+                   2 * p.P_TRASLADO_AEROPUERTO;
 
     var opcBus = evaluar('Bus', tb > 0 ? horasBus : 0, costoBus,
       tb > 0 && p.P_HERRAMIENTAS_TRANSPORTABLES,
@@ -1200,7 +1314,8 @@ function compararModos_(destino, nTecnicos, ctx) {
          horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
          detalle: 'De la base al terminal de buses' },
        { concepto: 'Viaje en bus', horas: redondear_(d.horasBus || 0, 2),
-         detalle: 'Tiempo del recorrido segun la empresa' }]);
+         detalle: 'Tiempo del recorrido segun la empresa' }],
+      p.P_ARRIENDO);
 
     opcBus.desgloseCosto = [
       { concepto: 'Pasajes ida y vuelta', monto: Math.round(2 * tb * nTecnicos),
@@ -1209,8 +1324,10 @@ function compararModos_(destino, nTecnicos, ctx) {
         detalle: 'En bus el bolso va gratis en la bodega del vehiculo' },
       { concepto: 'Traslados terminal a ciudad', monto: Math.round(2 * p.P_TRASLADO_AEROPUERTO),
         detalle: 'Ida y vuelta, por cuadrilla' },
-      { concepto: 'Arriendo de vehiculo en destino', monto: Math.round(p.P_ARRIENDO),
-        detalle: 'Sin camioneta hay que moverse en el destino' }
+      { concepto: 'Arriendo de vehiculo en destino',
+        monto: Math.round(p.P_ARRIENDO * opcBus.dias),
+        detalle: opcBus.dias + ' dia(s) a ' + formatearPesos_(p.P_ARRIENDO) +
+                 '. Sin camioneta hay que moverse en el destino' }
     ];
     opciones.push(opcBus);
   }
@@ -1236,7 +1353,7 @@ function compararModos_(destino, nTecnicos, ctx) {
     var costoPasajes = 2 * ta * nTecnicos;
     var costoEquipaje = 2 * p.P_EQUIPAJE_BODEGA_AVION * nTecnicos;
     var costoTraslados = 4 * p.P_TRASLADO_AEROPUERTO;
-    var costoAvion = costoPasajes + costoEquipaje + costoTraslados + p.P_ARRIENDO;
+    var costoAvion = costoPasajes + costoEquipaje + costoTraslados;
 
     var opcAvion = evaluar('Avion', ta > 0 ? horasAvionReales : 0, costoAvion,
       ta > 0 && p.P_HERRAMIENTAS_TRANSPORTABLES,
@@ -1255,7 +1372,8 @@ function compararModos_(destino, nTecnicos, ctx) {
          detalle: 'Esperar los bolsos en la cinta' },
        { concepto: 'Del aeropuerto de destino a la ciudad',
          horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
-         detalle: 'Los aeropuertos regionales quedan fuera de la ciudad' }]);
+         detalle: 'Los aeropuertos regionales quedan fuera de la ciudad' }],
+      p.P_ARRIENDO);
 
     opcAvion.desgloseCosto = [
       { concepto: 'Pasajes ida y vuelta', monto: Math.round(costoPasajes),
@@ -1267,8 +1385,10 @@ function compararModos_(destino, nTecnicos, ctx) {
                  '. Las herramientas no pueden ir en cabina' },
       { concepto: 'Traslados a los aeropuertos', monto: Math.round(costoTraslados),
         detalle: '4 trayectos: base-aeropuerto y aeropuerto-ciudad, ida y vuelta' },
-      { concepto: 'Arriendo de vehiculo en destino', monto: Math.round(p.P_ARRIENDO),
-        detalle: 'Sin camioneta hay que moverse en el destino' }
+      { concepto: 'Arriendo de vehiculo en destino',
+        monto: Math.round(p.P_ARRIENDO * opcAvion.dias),
+        detalle: opcAvion.dias + ' dia(s) a ' + formatearPesos_(p.P_ARRIENDO) +
+                 '. Sin camioneta hay que moverse en el destino' }
     ];
     opciones.push(opcAvion);
   }

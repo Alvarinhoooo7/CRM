@@ -61,6 +61,7 @@
     <button class="pestana"        data-vista="orden"       onclick="mostrar('orden')">Orden de servicio</button>
     <button class="pestana" data-vista="gestion" onclick="mostrar('gestion')">Planificación</button>
     <button class="pestana" data-vista="guia" onclick="mostrar('guia')">Guía del equipo</button>
+    <button class="pestana" data-vista="configuracion" onclick="mostrar('configuracion')">Configuración</button>
   </div>
 
   <div class="contenido">
@@ -73,10 +74,26 @@
     </div>
 
     <div id="errorGeneral" role="alert" class="error-caja oculto"></div>
-    <div class="tarjeta conexion-maps">
-      <div><h2>Rutas de Google Maps</h2><p id="estadoMaps" role="status">Revise la conexión y actualice las rutas cuando lo necesite.</p></div>
-      <div class="acciones-editor"><button class="btn btn-secundario" id="btnDiagnosticoMaps" onclick="probarMapsWeb()">Probar conexión</button><button class="btn" id="btnActualizarMaps" onclick="actualizarLoteMaps()">Actualizar Maps</button></div>
-      <details><summary>Cómo conectar Google Maps</summary><p>Sin clave: servicio nativo de Apps Script. Con clave propia: habilite Routes API y facturación en Google Cloud; en Propiedades del script defina MAPS_PROVEEDOR = ROUTES_API y GOOGLE_MAPS_API_KEY. No coloque la clave en este formulario ni en el manifiesto.</p></details>
+    <div class="vista" id="vista-configuracion">
+      <div class="intro-vista"><div><div class="sobretitulo">MANTENIMIENTO</div><h2>Configuración y Diagnóstico</h2><p>Herramientas técnicas para sincronizar con Excel y verificar la conexión a Google Maps.</p></div></div>
+      
+      <div class="tarjeta">
+        <h2>Sincronización de Datos</h2>
+        <p class="ayuda">Si realizaste grandes cambios en el Excel (Google Sheets) o si notas que la información está desactualizada, presiona este botón.</p>
+        <div class="acciones-editor"><button class="btn" onclick="recalcular()">Forzar Recálculo Completo</button></div>
+      </div>
+
+      <div class="tarjeta conexion-maps">
+        <div><h2>Rutas de Google Maps</h2><p id="estadoMaps" role="status">Revise la conexión y actualice las rutas cuando lo necesite.</p></div>
+        <div class="acciones-editor"><button class="btn btn-secundario" id="btnDiagnosticoMaps" onclick="probarMapsWeb()">Probar conexión</button><button class="btn" id="btnActualizarMaps" onclick="actualizarLoteMaps()">Actualizar Maps</button></div>
+        <details><summary>Cómo conectar Google Maps</summary><p>Sin clave: servicio nativo de Apps Script. Con clave propia: habilite Routes API y facturación en Google Cloud; en Propiedades del script defina MAPS_PROVEEDOR = ROUTES_API y GOOGLE_MAPS_API_KEY. No coloque la clave en este formulario ni en el manifiesto.</p></details>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Reconstrucción de Base de Datos</h2>
+        <p class="ayuda" style="color:#d32f2f">Si el Excel se corrompió irreparablemente o recibes advertencias de columnas perdidas, este botón borrará el archivo de configuración actual y regenerará las pestañas y tablas base por defecto. <b>Podrías perder configuraciones previas.</b></p>
+        <div class="acciones-editor"><button class="btn btn-acento" style="background:#d32f2f;border-color:#b71c1c" onclick="confirmarRestauracion()">Crear o restaurar hojas base</button></div>
+      </div>
     </div>
 
     <div class="vista" id="vista-operacion">

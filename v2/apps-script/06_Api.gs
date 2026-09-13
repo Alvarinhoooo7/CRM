@@ -147,6 +147,20 @@ function obtenerTablero(token, escenario, forzar) {
   return limpiarParaJson_(payload);
 }
 
+/** 
+ * Permite restaurar las hojas base de Excel directamente desde la UI web.
+ * Solo puede invocarse con una sesión válida.
+ */
+function apiRestaurarHojas(token) {
+  exigirSesion_(token);
+  try {
+    crearHojasBase_();
+    return { ok: true, mensaje: 'Hojas base restauradas con éxito. Por favor recarga el sitio.' };
+  } catch(e) {
+    return { ok: false, mensaje: e.message };
+  }
+}
+
 /** Arma el payload completo corriendo el motor en los dos escenarios. */
 function construirTablero_(idEscenario) {
   var datos = leerDatosDelLibro_();

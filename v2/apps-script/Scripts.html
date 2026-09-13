@@ -918,4 +918,30 @@ window.addEventListener('resize', function () {
   clearTimeout(window._redibujar);
   window._redibujar = setTimeout(dibujarGraficos, 250);
 });
+
+/* ==========================================================================
+   MANTENIMIENTO
+   ========================================================================== */
+function confirmarRestauracion() {
+  if (!confirm('⚠️ ALERTA ⚠️\n\n¿Estás seguro de que deseas regenerar la estructura base en tu Excel? Esto borrará configuraciones erróneas, pero podrías perder datos personalizados.')) return;
+  
+  document.getElementById('textoCargando').innerText = 'Restaurando estructura en Google Sheets...';
+  document.getElementById('cargando').style.display = 'flex';
+  
+  google.script.run
+    .withSuccessHandler(function (r) {
+      if (r.ok) {
+        alert(r.mensaje);
+        location.reload();
+      } else {
+        alert('Error: ' + r.mensaje);
+        document.getElementById('cargando').style.display = 'none';
+      }
+    })
+    .withFailureHandler(function (e) {
+      alert('Error en red: ' + e.message);
+      document.getElementById('cargando').style.display = 'none';
+    })
+    .apiRestaurarHojas(TOKEN);
+}
 </script>

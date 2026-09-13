@@ -77,6 +77,18 @@
     <div class="vista" id="vista-configuracion">
       <div class="intro-vista"><div><div class="sobretitulo">MANTENIMIENTO</div><h2>Configuración y Diagnóstico</h2><p>Herramientas técnicas para sincronizar con Excel y verificar la conexión a Google Maps.</p></div></div>
       
+      <div class="tarjeta" id="tarjetaParametros">
+        <h2>Parámetros del sistema</h2>
+        <p class="ayuda">Cuando el sistema incorpora funciones nuevas, la hoja CONFIG puede
+        quedarse sin los parámetros que esas funciones necesitan y el cálculo falla. Este
+        botón agrega <b>solo lo que falta</b> al final de CONFIG y no toca ningún valor que
+        usted ya haya configurado. No borra el plan.</p>
+        <div id="estadoParametros" role="status" class="chico">Revisando…</div>
+        <div class="acciones-editor" style="margin-top:12px">
+          <button class="btn" id="btnSincronizar" onclick="sincronizarParametros()">Actualizar CONFIG con parámetros nuevos</button>
+        </div>
+      </div>
+
       <div class="tarjeta">
         <h2>Sincronización de Datos</h2>
         <p class="ayuda">Si realizaste grandes cambios en el Excel (Google Sheets) o si notas que la información está desactualizada, presiona este botón.</p>

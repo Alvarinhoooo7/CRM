@@ -666,12 +666,21 @@ var ESQUEMA_CONFIG = [
               'incluyen. Son tres bolsos para una cuadrilla de tres, en la ida y en la ' +
               'vuelta: seis cobros por viaje.' },
 
-      { clave: 'P_TRASLADO_AEROPUERTO', etiqueta: 'Traslado terminal o aeropuerto a la ciudad, por trayecto',
-        valor: 10000, unidad: '$', tipo: 'moneda', fuente: 'SUPUESTO',
-        validacion: { min: 0, max: 200000 },
-        nota: 'Por cuadrilla y por trayecto. Se cobra CUATRO veces en un viaje en avion: ' +
-              'base al aeropuerto de Santiago, aeropuerto de destino a la ciudad, y los ' +
-              'dos de vuelta.' },
+      { clave: 'P_TAXI_POR_KM', etiqueta: 'Tarifa promedio de taxi',
+        valor: 1000, unidad: '$/km', tipo: 'moneda', fuente: 'JEFATURA', critico: true,
+        validacion: { min: 0, max: 20000 },
+        nota: 'NO SE ARRIENDA VEHICULO. Si la cuadrilla llega en bus o en avion y necesita ' +
+              'moverse en el destino, toma taxi. Se presupuesta a un promedio de $1.000 el ' +
+              'kilometro, que es la referencia de jefatura para regiones. Todo el costo de ' +
+              'movilizacion en destino sale de esta tarifa multiplicada por los kilometros.' },
+
+      { clave: 'P_KM_TERMINAL_CIUDAD', etiqueta: 'Kilometros del aeropuerto o terminal a la ciudad',
+        valor: 12, unidad: 'km', tipo: 'numero', fuente: 'SUPUESTO', critico: true,
+        validacion: { min: 0, max: 200 },
+        nota: 'Un trayecto en taxi. Se paga CUATRO veces en un viaje en avion: base al ' +
+              'aeropuerto de Santiago, aeropuerto de destino a la ciudad, y los dos de ' +
+              'vuelta. Los aeropuertos regionales suelen quedar mas lejos que este ' +
+              'promedio: ajustar por destino si se quiere precision.' },
 
       { clave: 'P_TIEMPO_A_AEROPUERTO_H', etiqueta: 'Tiempo de la base al aeropuerto o terminal',
         valor: 0.75, unidad: 'h', tipo: 'numero', fuente: 'SUPUESTO',
@@ -691,11 +700,13 @@ var ESQUEMA_CONFIG = [
         nota: 'Bajar del avion y esperar los bolsos en la cinta. Se cuenta en cada ' +
               'aterrizaje, ida y vuelta.' },
 
-      { clave: 'P_ARRIENDO', etiqueta: 'Arriendo de vehiculo en destino',
-        valor: 15000, unidad: '$/dia', tipo: 'moneda', fuente: 'SUPUESTO', critico: true,
-        validacion: { min: 0, max: 500000 },
-        nota: 'Si se llega en bus o avion hay que moverse en el destino. Se cobra por ' +
-              'dia de permanencia y por cuadrilla.' },
+      { clave: 'P_KM_TAXI_DIA', etiqueta: 'Kilometros de taxi por dia en el destino',
+        valor: 20, unidad: 'km/dia', tipo: 'numero', fuente: 'SUPUESTO', critico: true,
+        validacion: { min: 0, max: 300 },
+        nota: 'Cuanto se mueve la cuadrilla dentro de la ciudad de destino en un dia: del ' +
+              'hotel al cliente, entre sitios y de vuelta. Solo aplica cuando se llega sin ' +
+              'camioneta. Multiplicado por P_TAXI_POR_KM da el gasto diario de ' +
+              'movilizacion, que sustituye al arriendo de vehiculo.' },
 
       { clave: 'P_TRANSPORTE_PUBLICO', etiqueta: 'Pasaje de metro o micro por tramo',
         valor: 1500, unidad: '$', tipo: 'moneda', fuente: 'SUPUESTO',
@@ -1193,15 +1204,15 @@ var ESQUEMA_LISTAS = {
  * BUS
  *   pasajes     = tarifa_bus_del_tramo * n
  *   flete       = P_FLETE_HERRAMIENTAS por cuadrilla y tramo
- *   arriendo    = P_ARRIENDO por dia de permanencia en destino
- *   traslados   = P_TRASLADO_AEROPUERTO por trayecto
+ *   taxi destino= P_KM_TAXI_DIA * P_TAXI_POR_KM por dia de permanencia
+ *   traslados   = P_KM_TERMINAL_CIUDAD * P_TAXI_POR_KM por carrera
  *   combustible, peajes y desgaste = 0
  *
  * AVION
  *   pasajes     = tarifa_avion_del_tramo * n
  *   flete       = P_FLETE_HERRAMIENTAS por cuadrilla y tramo
- *   arriendo    = P_ARRIENDO por dia de permanencia en destino
- *   traslados   = P_TRASLADO_AEROPUERTO por trayecto
+ *   taxi destino= P_KM_TAXI_DIA * P_TAXI_POR_KM por dia de permanencia
+ *   traslados   = P_KM_TERMINAL_CIUDAD * P_TAXI_POR_KM por carrera
  *   horas       = horas_vuelo + P_CHECKIN_AEROPUERTO_H
  *
  * TRANSPORTE PUBLICO

@@ -770,3 +770,133 @@ function registrarBitacora_(libro, accion, detalle) {
     // La bitacora nunca debe hacer fallar una operacion real.
   }
 }
+
+/* ==========================================================================
+ * F. SINCRONIZACION DE PARAMETROS NUEVOS
+ * --------------------------------------------------------------------------
+ * Cuando se agrega un parametro al esquema, la hoja CONFIG que ya existe no
+ * lo tiene, y el motor falla diciendo que falta el rango con nombre.
+ *
+ * "Crear o restaurar hojas base" no lo arregla, porque conserva las hojas que
+ * ya tienen datos. Y "Reinstalar desde cero" lo arreglaria borrando el plan
+ * completo, que es un precio absurdo por agregar una fila.
+ *
+ * Esta funcion agrega SOLO lo que falta, al final de CONFIG, y crea sus rangos
+ * con nombre. No toca ningun valor existente ni ninguna otra hoja.
+ * ========================================================================== */
+
+/**
+ * Agrega a CONFIG los parametros del esquema que todavia no existen.
+ * @return {{agregados:Array, yaEstaban:number, mensaje:string}}
+ */
+function sincronizarParametros_() {
+  var libro = obtenerLibro_();
+  var hoja = libro.getSheetByName(HOJAS.CONFIG.nombre);
+
+  if (!hoja) {
+    throw new Error('No existe la hoja CONFIG. Use "Crear o restaurar hojas base" ' +
+                    'primero: no hay nada que sincronizar.');
+  }
+
+  // Se revisa el esquema completo y se separa lo que falta.
+  var faltantes = [];
+  var presentes = 0;
+
+  listarParametros_().forEach(function (entrada) {
+    if (libro.getRangeByName(entrada.definicion.clave)) presentes++;
+    else faltantes.push(entrada);
+  });
+
+  if (!faltantes.length) {
+    return {
+      agregados: [],
+      yaEstaban: presentes,
+      mensaje: 'CONFIG ya tiene los ' + presentes + ' parametros del esquema. ' +
+               'No habia nada que agregar.'
+    };
+  }
+
+  // Se escriben al final de la hoja, bajo un encabezado que deja claro que
+  // llegaron en una actualizacion y no en la instalacion original.
+  var fila = hoja.getLastRow() + 2;
+
+  hoja.getRange(fila, 1, 1, 4).merge()
+    .setValue('PARAMETROS AGREGADOS EN ACTUALIZACIONES · ' +
+              Utilities.formatDate(new Date(), APP.ZONA_HORARIA, 'dd-MM-yyyy'))
+    .setBackground(APP.COLOR_ACENTO).setFontColor('#FFFFFF')
+    .setFontWeight('bold').setFontSize(10);
+  fila += 1;
+
+  hoja.getRange(fila, 1, 1, 4).merge()
+    .setValue('Se agregaron porque el sistema incorporo funciones nuevas. Valen lo mismo ' +
+              'que los de arriba: se editan igual y el motor los lee igual. Puede moverlos ' +
+              'a su seccion si prefiere tenerlos ordenados, el rango con nombre los sigue.')
+    .setFontStyle('italic').setFontSize(9).setWrap(true);
+  hoja.setRowHeight(fila, 30);
+  fila += 1;
+
+  var agregados = [];
+  var seccionActual = '';
+
+  for (var i = 0; i < faltantes.length; i++) {
+    var entrada = faltantes[i];
+
+    // Se conserva la agrupacion por seccion para que se entienda de donde sale.
+    if (entrada.seccion !== seccionActual) {
+      seccionActual = entrada.seccion;
+      hoja.getRange(fila, 1, 1, 4).merge()
+        .setValue(seccionActual.toUpperCase())
+        .setBackground(APP.COLOR_PRIMARIO).setFontColor('#FFFFFF')
+        .setFontWeight('bold').setFontSize(10);
+      fila += 1;
+    }
+
+    escribirParametro_(hoja, fila, entrada.definicion);
+    definirRango_(libro, entrada.definicion.clave, hoja.getRange(fila, 2));
+    agregados.push(entrada.definicion.clave + ' · ' + entrada.definicion.etiqueta);
+    fila += 1;
+  }
+
+  // El cache del motor guarda el resultado anterior: hay que botarlo o se
+  // seguiria mostrando el plan viejo.
+  try {
+    CacheService.getScriptCache().removeAll([
+      'tablero_v2_OPERACION_REAL', 'tablero_v2_LITERAL_PDF'
+    ]);
+  } catch (e) { /* sin cache disponible, no es critico */ }
+
+  registrarBitacora_(libro, 'SINCRONIZACION',
+    agregados.length + ' parametros agregados a CONFIG: ' + agregados.join(', '));
+
+  return {
+    agregados: agregados,
+    yaEstaban: presentes,
+    mensaje: 'Se agregaron ' + agregados.length + ' parametros nuevos al final de CONFIG. ' +
+             'Los ' + presentes + ' que ya estaban quedaron intactos, con sus valores.'
+  };
+}
+
+/**
+ * Revisa si CONFIG esta al dia con el esquema, sin escribir nada.
+ * La interfaz la usa para avisar antes de que el motor falle.
+ */
+function diagnosticarParametros_() {
+  var libro = obtenerLibro_();
+  var faltantes = [];
+
+  listarParametros_().forEach(function (entrada) {
+    if (!libro.getRangeByName(entrada.definicion.clave)) {
+      faltantes.push({
+        clave: entrada.definicion.clave,
+        etiqueta: entrada.definicion.etiqueta,
+        seccion: entrada.seccion
+      });
+    }
+  });
+
+  return {
+    alDia: faltantes.length === 0,
+    total: listarParametros_().length,
+    faltantes: faltantes
+  };
+}

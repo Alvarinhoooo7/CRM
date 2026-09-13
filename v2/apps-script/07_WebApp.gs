@@ -55,6 +55,7 @@ function onOpen() {
     .addItem('Abrir panel', 'abrirPanel_')
     .addSeparator()
     .addItem('Configurar credenciales de acceso', 'menuConfigurarAcceso_')
+    .addItem('Actualizar CONFIG con parametros nuevos', 'menuSincronizar_')
     .addItem('Crear o restaurar hojas base', 'menuInstalar_')
     .addItem('Reinstalar desde cero (borra datos)', 'menuReinstalar_')
     .addSeparator()
@@ -87,6 +88,18 @@ function menuConfigurarAcceso_() {
     ui.alert('Acceso Web', resultado, ui.ButtonSet.OK);
   } catch (err) {
     ui.alert('Error al configurar acceso', err.message, ui.ButtonSet.OK);
+  }
+}
+
+function menuSincronizar_() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var r = sincronizarParametros_();
+    var texto = r.mensaje;
+    if (r.agregados.length) texto += '\n\n' + r.agregados.join('\n');
+    ui.alert('CONFIG actualizada', texto, ui.ButtonSet.OK);
+  } catch (err) {
+    ui.alert('Error al sincronizar', err.message, ui.ButtonSet.OK);
   }
 }
 

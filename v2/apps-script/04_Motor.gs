@@ -342,16 +342,18 @@ function costearTramo_(f, viaje, nTecnicos, ctx) {
       // cobra POR PERSONA y POR TRAMO. Es el costo que mas se olvida al
       // comparar un vuelo contra la camioneta.
       c.flete = Math.round(p.P_EQUIPAJE_BODEGA_AVION * nTecnicos);
-      // Dos traslados por tramo: base al aeropuerto y aeropuerto de destino
-      // a la ciudad.
-      c.traslados = Math.round(p.P_TRASLADO_AEROPUERTO * 2);
+      // Dos carreras de taxi por tramo: base al aeropuerto y aeropuerto de
+      // destino a la ciudad. No se arrienda vehiculo, se toma taxi.
+      c.traslados = Math.round(2 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM);
     } else {
       // En bus el bolso viaja en la bodega del vehiculo, normalmente gratis.
       c.flete = Math.round(p.P_FLETE_HERRAMIENTAS);
-      c.traslados = Math.round(p.P_TRASLADO_AEROPUERTO);
+      c.traslados = Math.round(p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM);
     }
 
-    c.arriendo = Math.round(p.P_ARRIENDO);
+    // Movilizacion dentro de la ciudad de destino: taxi por kilometro, no
+    // arriendo de vehiculo.
+    c.arriendo = Math.round(p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM);
 
     if (!p.P_HERRAMIENTAS_TRANSPORTABLES) {
       ctx.alertas.push(alerta_('HERRAMIENTAS_SIN_VEHICULO', 'error',
@@ -1303,7 +1305,7 @@ function compararModos_(destino, nTecnicos, ctx) {
     // se le pasa al buscador de programacion para que lo multiplique por los
     // dias que termine eligiendo.
     var costoBus = 2 * tb * nTecnicos + 2 * p.P_FLETE_HERRAMIENTAS +
-                   2 * p.P_TRASLADO_AEROPUERTO;
+                   2 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM;
 
     var opcBus = evaluar('Bus', tb > 0 ? horasBus : 0, costoBus,
       tb > 0 && p.P_HERRAMIENTAS_TRANSPORTABLES,
@@ -1315,19 +1317,22 @@ function compararModos_(destino, nTecnicos, ctx) {
          detalle: 'De la base al terminal de buses' },
        { concepto: 'Viaje en bus', horas: redondear_(d.horasBus || 0, 2),
          detalle: 'Tiempo del recorrido segun la empresa' }],
-      p.P_ARRIENDO);
+      p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM);
 
     opcBus.desgloseCosto = [
       { concepto: 'Pasajes ida y vuelta', monto: Math.round(2 * tb * nTecnicos),
         detalle: nTecnicos + ' tecnicos x 2 tramos x ' + formatearPesos_(tb) },
       { concepto: 'Bolsos de herramientas', monto: Math.round(2 * p.P_FLETE_HERRAMIENTAS),
         detalle: 'En bus el bolso va gratis en la bodega del vehiculo' },
-      { concepto: 'Traslados terminal a ciudad', monto: Math.round(2 * p.P_TRASLADO_AEROPUERTO),
-        detalle: 'Ida y vuelta, por cuadrilla' },
-      { concepto: 'Arriendo de vehiculo en destino',
-        monto: Math.round(p.P_ARRIENDO * opcBus.dias),
-        detalle: opcBus.dias + ' dia(s) a ' + formatearPesos_(p.P_ARRIENDO) +
-                 '. Sin camioneta hay que moverse en el destino' }
+      { concepto: 'Taxi terminal a ciudad',
+        monto: Math.round(2 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM),
+        detalle: '2 carreras de ' + p.P_KM_TERMINAL_CIUDAD + ' km a ' +
+                 formatearPesos_(p.P_TAXI_POR_KM) + ' el km' },
+      { concepto: 'Taxi dentro de la ciudad de destino',
+        monto: Math.round(p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM * opcBus.dias),
+        detalle: opcBus.dias + ' dia(s) x ' + p.P_KM_TAXI_DIA + ' km a ' +
+                 formatearPesos_(p.P_TAXI_POR_KM) + ' el km. No se arrienda ' +
+                 'vehiculo: se toma taxi' }
     ];
     opciones.push(opcBus);
   }
@@ -1352,7 +1357,7 @@ function compararModos_(destino, nTecnicos, ctx) {
     // facturar equipaje en cada tramo: n x 2 cobros que la tarifa no incluye.
     var costoPasajes = 2 * ta * nTecnicos;
     var costoEquipaje = 2 * p.P_EQUIPAJE_BODEGA_AVION * nTecnicos;
-    var costoTraslados = 4 * p.P_TRASLADO_AEROPUERTO;
+    var costoTraslados = 4 * p.P_KM_TERMINAL_CIUDAD * p.P_TAXI_POR_KM;
     var costoAvion = costoPasajes + costoEquipaje + costoTraslados;
 
     var opcAvion = evaluar('Avion', ta > 0 ? horasAvionReales : 0, costoAvion,
@@ -1373,7 +1378,7 @@ function compararModos_(destino, nTecnicos, ctx) {
        { concepto: 'Del aeropuerto de destino a la ciudad',
          horas: redondear_(p.P_TIEMPO_A_AEROPUERTO_H, 2),
          detalle: 'Los aeropuertos regionales quedan fuera de la ciudad' }],
-      p.P_ARRIENDO);
+      p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM);
 
     opcAvion.desgloseCosto = [
       { concepto: 'Pasajes ida y vuelta', monto: Math.round(costoPasajes),
@@ -1383,12 +1388,15 @@ function compararModos_(destino, nTecnicos, ctx) {
         detalle: nTecnicos + ' bolsos x 2 tramos x ' +
                  formatearPesos_(p.P_EQUIPAJE_BODEGA_AVION) +
                  '. Las herramientas no pueden ir en cabina' },
-      { concepto: 'Traslados a los aeropuertos', monto: Math.round(costoTraslados),
-        detalle: '4 trayectos: base-aeropuerto y aeropuerto-ciudad, ida y vuelta' },
-      { concepto: 'Arriendo de vehiculo en destino',
-        monto: Math.round(p.P_ARRIENDO * opcAvion.dias),
-        detalle: opcAvion.dias + ' dia(s) a ' + formatearPesos_(p.P_ARRIENDO) +
-                 '. Sin camioneta hay que moverse en el destino' }
+      { concepto: 'Taxi a los aeropuertos', monto: Math.round(costoTraslados),
+        detalle: '4 carreras de ' + p.P_KM_TERMINAL_CIUDAD + ' km a ' +
+                 formatearPesos_(p.P_TAXI_POR_KM) + ' el km: base-aeropuerto y ' +
+                 'aeropuerto-ciudad, ida y vuelta' },
+      { concepto: 'Taxi dentro de la ciudad de destino',
+        monto: Math.round(p.P_KM_TAXI_DIA * p.P_TAXI_POR_KM * opcAvion.dias),
+        detalle: opcAvion.dias + ' dia(s) x ' + p.P_KM_TAXI_DIA + ' km a ' +
+                 formatearPesos_(p.P_TAXI_POR_KM) + ' el km. No se arrienda ' +
+                 'vehiculo: se toma taxi' }
     ];
     opciones.push(opcAvion);
   }

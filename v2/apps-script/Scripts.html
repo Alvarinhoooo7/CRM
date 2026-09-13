@@ -163,9 +163,43 @@ function mostrarCargando(activo, texto) {
 function mostrarError(e) {
   mostrarCargando(false);
   var caja = document.getElementById('errorGeneral');
-  caja.innerHTML = '<b>No se pudo calcular el plan</b><br><br>' +
-                   escapar(e.message).replace(/\n/g, '<br>');
+  var mensaje = escapar(e.message).replace(/\n/g, '<br>');
+
+  // Si lo que falta son parametros, se ofrece el arreglo aqui mismo en vez de
+  // mandar al usuario a buscar el boton en otra pestana.
+  var faltanParametros = e.message.indexOf('le faltan') !== -1 &&
+                         e.message.indexOf('parametros') !== -1;
+
+  caja.innerHTML = '<b>No se pudo calcular el plan</b><br><br>' + mensaje +
+    (faltanParametros
+      ? '<div style="margin-top:14px"><button class="btn" onclick="arreglarParametros()">' +
+        'Agregar los par&aacute;metros que faltan y recalcular</button>' +
+        '<div class="chico" style="margin-top:7px">Solo agrega lo que falta al final de ' +
+        'CONFIG. No borra el plan ni cambia ning&uacute;n valor ya configurado.</div></div>'
+      : '');
   caja.classList.remove('oculto');
+}
+
+/** Arregla los parametros faltantes desde la pantalla de error. */
+function arreglarParametros() {
+  var caja = document.getElementById('errorGeneral');
+  caja.innerHTML = '<div class="cargando"><div class="girador"></div>' +
+                   'Agregando los par&aacute;metros que faltan...</div>';
+
+  google.script.run
+    .withSuccessHandler(function (r) {
+      caja.innerHTML = '<b>Listo.</b><br>' + escapar(r.mensaje) + '<br>Recalculando...';
+      setTimeout(function () {
+        caja.classList.add('oculto');
+        cargarTablero(true);
+      }, 1200);
+    })
+    .withFailureHandler(function (err) {
+      caja.innerHTML = '<b>No se pudo arreglar autom&aacute;ticamente</b><br><br>' +
+        escapar(err.message) + '<br><br>Abra la planilla y use el men&uacute; ' +
+        '<b>Servicio T&eacute;cnico, Actualizar CONFIG con par&aacute;metros nuevos</b>.';
+    })
+    .sincronizarParametrosWeb(TOKEN);
 }
 
 function mostrar(vista) {
@@ -175,6 +209,7 @@ function mostrar(vista) {
   // por primera vez. Vive en Ayuda.html.
   inyectarAyuda(vista);
   if (vista === 'guia') dibujarManual();
+  if (vista === 'configuracion') revisarParametros();
   document.querySelectorAll('.vista').forEach(function (v) { v.classList.remove('activa'); });
   document.querySelectorAll('.pestana').forEach(function (p) { p.classList.remove('activa'); });
   var destino = document.getElementById('vista-' + vista);
@@ -715,6 +750,60 @@ function dibujarDetalleModo() {
     '</b> para una cuadrilla de ' + c.tecnicos + ' técnicos que instala ' + c.equipos +
     ' equipo(s). Todos los totales incluyen hotel y viáticos, no solo el pasaje.</p>' +
     '<div class="rejilla rejilla-3">' + tarjetas + '</div>';
+}
+
+/* ==========================================================================
+   MANTENCION · parametros nuevos
+   ========================================================================== */
+
+/** Revisa si CONFIG tiene todos los parametros que el motor necesita. */
+function revisarParametros() {
+  var caja = document.getElementById('estadoParametros');
+  if (!caja) return;
+
+  google.script.run
+    .withSuccessHandler(function (d) {
+      if (d.alDia) {
+        caja.innerHTML = '<span class="pastilla ok">AL DIA</span> CONFIG tiene los ' +
+          d.total + ' parámetros del esquema.';
+        document.getElementById('btnSincronizar').disabled = true;
+      } else {
+        caja.innerHTML = '<span class="pastilla fuera">FALTAN ' + d.faltantes.length +
+          '</span> ' + d.faltantes.map(function (f) {
+            return escapar(f.etiqueta); }).join(' · ') +
+          '<br><b>Presione el botón para agregarlos.</b> No se pierde nada de lo ya configurado.';
+        document.getElementById('btnSincronizar').disabled = false;
+      }
+    })
+    .withFailureHandler(function (e) {
+      caja.textContent = 'No se pudo revisar: ' + e.message;
+    })
+    .diagnosticarParametrosWeb(TOKEN);
+}
+
+/** Agrega los parametros que falten y vuelve a calcular. */
+function sincronizarParametros() {
+  var boton = document.getElementById('btnSincronizar');
+  var caja = document.getElementById('estadoParametros');
+  boton.disabled = true;
+  boton.textContent = 'Actualizando…';
+
+  google.script.run
+    .withSuccessHandler(function (r) {
+      boton.textContent = 'Actualizar CONFIG con parámetros nuevos';
+      caja.innerHTML = '<span class="pastilla ok">LISTO</span> ' + escapar(r.mensaje) +
+        (r.agregados.length
+          ? '<br><span class="chico">' + r.agregados.map(escapar).join('<br>') + '</span>'
+          : '');
+      // Con los parametros nuevos ya creados, se recalcula solo.
+      setTimeout(function () { cargarTablero(true); }, 800);
+    })
+    .withFailureHandler(function (e) {
+      boton.disabled = false;
+      boton.textContent = 'Actualizar CONFIG con parámetros nuevos';
+      caja.innerHTML = '<span class="pastilla fuera">ERROR</span> ' + escapar(e.message);
+    })
+    .sincronizarParametrosWeb(TOKEN);
 }
 
 function dibujarRutas() {

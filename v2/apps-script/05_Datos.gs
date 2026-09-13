@@ -71,10 +71,17 @@ function leerParametros_(libro) {
   });
 
   if (sinDefinir.length) {
-    throw new Error('No estan definidos estos rangos con nombre en CONFIG: ' +
-                    sinDefinir.slice(0, 5).join(', ') +
-                    (sinDefinir.length > 5 ? ' y ' + (sinDefinir.length - 5) + ' mas' : '') +
-                    '. Ejecute "Crear o restaurar hojas base" para regenerarlos.');
+    // Esto pasa cuando el sistema incorpora parametros nuevos y la hoja CONFIG
+    // se creo antes. La solucion NO es reinstalar, que borraria el plan: hay
+    // una accion que agrega solo lo que falta y conserva todo lo demas.
+    throw new Error(
+      'A la hoja CONFIG le faltan ' + sinDefinir.length + ' parametros que el sistema ' +
+      'necesita: ' + sinDefinir.join(', ') + '. ' +
+      'Pasa cuando se agregan funciones nuevas y la hoja se creo antes. NO reinstale: ' +
+      'perderia el plan. ' +
+      'SOLUCION: en la pestana Configuracion de esta aplicacion presione "Actualizar ' +
+      'CONFIG con parametros nuevos". Tambien esta en el menu de la planilla, en ' +
+      'Servicio Tecnico. Agrega solo lo que falta y no toca ningun valor existente.');
   }
 
   validarParametros_(salida);

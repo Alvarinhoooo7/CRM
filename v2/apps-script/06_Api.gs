@@ -541,3 +541,21 @@ function obtenerCatalogoPeajes(token) {
     sinTarifa: plazasSinTarifa_()
   };
 }
+
+
+/* ==========================================================================
+ * D. MANTENCION DESDE LA WEB
+ * ========================================================================== */
+
+/** Agrega a CONFIG los parametros nuevos del esquema, sin borrar nada. */
+function sincronizarParametrosWeb(token) {
+  exigirSesion_(token);
+  var r = sincronizarParametros_();
+  return { ok: true, mensaje: r.mensaje, agregados: r.agregados };
+}
+
+/** Dice si CONFIG esta al dia con el esquema, sin escribir nada. */
+function diagnosticarParametrosWeb(token) {
+  exigirSesion_(token);
+  return diagnosticarParametros_();
+}

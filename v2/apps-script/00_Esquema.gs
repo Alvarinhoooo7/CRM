@@ -620,14 +620,14 @@ var ESQUEMA_CONFIG = [
               'que demuestra cuanto cuesta la restriccion.' },
 
       { clave: 'P_FLETE_HERRAMIENTAS', etiqueta: 'Costo de trasladar el set de herramientas',
-        valor: 35000, unidad: '$/tramo', tipo: 'moneda', fuente: 'SUPUESTO', critico: true,
+        valor: 0, unidad: '$/tramo', tipo: 'moneda', fuente: 'SUPUESTO', critico: true,
         validacion: { min: 0, max: 500000 },
         nota: 'Equipaje sobredimensionado o encomienda por cuadrilla y por tramo, en bus ' +
               'o avion. Se suma al costo de esos modos: sin esto el comparador los haria ' +
               'ganar artificialmente.' },
 
       { clave: 'P_TRASLADO_AEROPUERTO', etiqueta: 'Traslado terminal - ciudad por trayecto',
-        valor: 25000, unidad: '$', tipo: 'moneda', fuente: 'SUPUESTO',
+        valor: 10000, unidad: '$', tipo: 'moneda', fuente: 'SUPUESTO',
         validacion: { min: 0, max: 200000 },
         nota: 'Ida y vuelta al aeropuerto o al terminal de buses, por cuadrilla.' },
 
@@ -638,7 +638,7 @@ var ESQUEMA_CONFIG = [
               '1,5 h de jornada.' },
 
       { clave: 'P_ARRIENDO', etiqueta: 'Arriendo de vehiculo en destino',
-        valor: 45000, unidad: '$/dia', tipo: 'moneda', fuente: 'SUPUESTO', critico: true,
+        valor: 15000, unidad: '$/dia', tipo: 'moneda', fuente: 'SUPUESTO', critico: true,
         validacion: { min: 0, max: 500000 },
         nota: 'Si se llega en bus o avion hay que moverse en el destino. Se cobra por ' +
               'dia de permanencia y por cuadrilla.' },

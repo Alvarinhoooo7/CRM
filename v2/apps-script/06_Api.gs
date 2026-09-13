@@ -21,6 +21,88 @@
  *  MODO_ACCESO no está conectado al login de esta versión.
  * ============================================================================
  */
+
+var DURACION_SESION_SEGUNDOS = 6 * 60 * 60;   // 6 horas
+var PREFIJO_SESION = 'sesion_';
+
+/* ==========================================================================
+ * A. SESION
+ * ========================================================================== */
+
+/**
+ * Define el correo y la clave de acceso. Se ejecuta UNA VEZ desde el editor
+ * de Apps Script, nunca desde la interfaz.
+ *
+ * Para cambiarlos, edite los dos valores y vuelva a ejecutar esta funcion.
+ */
+function configurarAcceso_() {
+  var props = PropertiesService.getScriptProperties();
+  var correo = props.getProperty('ACCESO_EMAIL');
+  var clave = props.getProperty('ACCESO_CLAVE_INICIAL');
+  if (!correo || !clave || clave.length < 10) throw new Error('Configure ACCESO_EMAIL y ACCESO_CLAVE_INICIAL (10 caracteres o más) en Propiedades del script.');
+  props.setProperties({ ACCESO_EMAIL: correo.toLowerCase().trim(), ACCESO_HASH: hashClave_(clave), ID_PLANILLA: SpreadsheetApp.getActiveSpreadsheet().getId() });
+  props.deleteProperty('ACCESO_CLAVE_INICIAL');
+  return 'Acceso configurado. La clave inicial fue eliminada de las propiedades.';
+}
+
+/**
+ * Función pública visible en el menú desplegable del editor de Apps Script.
+ * Ejecutar una sola vez tras definir ACCESO_EMAIL y ACCESO_CLAVE_INICIAL.
+ */
+function configurarAcceso() {
+  return configurarAcceso_();
+}
+
+/** SHA-256 en hexadecimal. */
+function hashClave_(clave) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+                                      String(clave), Utilities.Charset.UTF_8);
+  return bytes.map(function (b) {
+    return ('0' + (b & 0xFF).toString(16)).slice(-2);
+  }).join('');
+}
+
+/**
+ * Valida credenciales y entrega un token de sesion.
+ * @return {{ok:boolean, token:string, mensaje:string}}
+ */
+function iniciarSesion(email, clave) {
+  var props = PropertiesService.getScriptProperties();
+  var correosPermitidos = (props.getProperty('ACCESO_EMAIL') || '').toLowerCase().split(',').map(function(e) { return e.trim(); });
+  var esperadoHash = props.getProperty('ACCESO_HASH');
+
+  if (correosPermitidos.length === 0 || !esperadoHash) {
+    return { ok: false, token: '',
+             mensaje: 'El acceso no esta configurado. Ejecute configurarAcceso() una vez ' +
+                      'desde el editor de Apps Script.' };
+  }
+
+  var emailNormalizado = String(email || '').toLowerCase().trim();
+  var coincide = (correosPermitidos.indexOf(emailNormalizado) !== -1) &&
+                 (hashClave_(clave) === esperadoHash);
+
+  if (!coincide) {
+    Utilities.sleep(600);   // frena el ensayo y error a fuerza bruta
+    return { ok: false, token: '', mensaje: 'Correo o clave incorrectos.' };
+  }
+
+  var token = Utilities.getUuid();
+  CacheService.getScriptCache().put(PREFIJO_SESION + token, emailNormalizado,
+                                    DURACION_SESION_SEGUNDOS);
+
+  registrarBitacora_(obtenerLibro_(), 'INGRESO', emailNormalizado);
+  return { ok: true, token: token, mensaje: 'Bienvenido', email: emailNormalizado };
+}
+
+/** Cierra la sesion invalidando el token. */
+function cerrarSesion(token) {
+  CacheService.getScriptCache().remove(PREFIJO_SESION + token);
+  return { ok: true };
+}
+
+/**
+ * Verifica el token. Lanza si no es valido: ningun endpoint continua sin esto.
+ */
 function exigirSesion_(token) {
   if (!token) throw new Error('Sesion no iniciada.');
   var email = CacheService.getScriptCache().get(PREFIJO_SESION + token);
@@ -81,13 +163,7 @@ function construirTablero_(idEscenario) {
     if (d.localidad !== 'BASE') pares.push({ origen: 'BASE', destino: d.localidad });
   });
 
-  // Abrir o recalcular la web nunca dispara decenas de consultas externas.
-  // Maps se actualiza por lotes mediante el botón explícito de coordinación.
-  var cacheRutas = cargarCacheRutas_(datos.libro, datos.parametros);
-  var resultadoRutas = {rutas:cacheRutas.mapa,consultas:0,errores:[]};
-  var sinRuta = {};
-  pares.forEach(function(par){if(par.origen!==par.destino && !obtenerRuta_(cacheRutas.mapa,par.origen,par.destino,false)) sinRuta[par.origen+' → '+par.destino]=true;});
-  if(Object.keys(sinRuta).length) resultadoRutas.errores.push(Object.keys(sinRuta).length+' rutas sin datos vigentes. Use Actualizar Maps para consultar el siguiente lote.');
+  var resultadoRutas = resolverRutas_(pares, direcciones, datos.parametros, datos.libro);
 
   var entrada = {
     parametros: datos.parametros,

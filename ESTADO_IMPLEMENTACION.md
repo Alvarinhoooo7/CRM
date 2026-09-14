@@ -116,7 +116,10 @@ Actualizado: 14-09-2026. Estado: IMPLEMENTACIÓN LOCAL PREPARADA Y AJUSTADA CON 
 
 ## G. Corte y eliminación — aún no ejecutados
 
-- [ ] Crear copia de ensayo separada del respaldo verificado. El respaldo ya existe y está verificado; falta la copia donde se instalará la aplicación nueva.
+- [x] Crear copia de ensayo separada del respaldo verificado: spreadsheet nuevo «Servicio Tecnico en Ruta - ENSAYO» con script vinculado, creado con `clasp create-script --type sheets`. Identificadores en `.local-backup/ensayo-20260914/ensayo.json`, fuera de git.
+- [x] Subir la aplicación a la copia de ensayo: 13 archivos con `clasp push`. El libro «Evaluacion 1» NO fue tocado; su proyecto sigue con v2 más el puente.
+- [ ] Ejecutar `crearHojasBase()` en la copia de ensayo desde el editor y autorizar los permisos. `clasp run` devuelve NOT_FOUND también en el proyecto nuevo: es el cliente OAuth genérico, no el proyecto.
+- [ ] Tras instalar, ejecutar `cargarDatosEjemplo()` y `ejecutarPruebas()` y revisar formatos, protecciones y evaluación numérica de las fórmulas.
 - [x] Comprobar activadores antiguos: el inventario no encontró ninguno instalado, así que no hay disparadores que desactivar en el corte.
 - [ ] Aplicar mapeo de migración real; conciliar datos e históricos contra origen.
 - [ ] Probar todas las operaciones en copia con dos usuarios móviles.

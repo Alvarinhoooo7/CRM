@@ -93,7 +93,9 @@ function crearHojasInterno_() {
       exigir_(cols.every(function(c,i) { return c===actuales[i]; }),n+': esquema anterior detectado. Ejecute migración en copia; no se restaurará encima de datos existentes.');
     }
   });
-  libro.setSpreadsheetLocale('es_CL').setSpreadsheetTimeZone('America/Santiago');
+  // Ninguno de los dos devuelve el libro: en Apps Script son void y no se encadenan.
+  libro.setSpreadsheetLocale('es_CL');
+  libro.setSpreadsheetTimeZone('America/Santiago');
   PropertiesService.getScriptProperties().setProperty('LIBRO_OPERATIVO',libro.getId());
   Object.keys(ESQUEMA).forEach(function(n) {
     var h=libro.getSheetByName(n)||libro.insertSheet(n), cols=columnas_(n);

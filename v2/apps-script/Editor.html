@@ -1,0 +1,136 @@
+<script>
+var EDITOR = null;
+function avisar(texto, error) {
+  var e = document.getElementById('notificacion');
+  e.className = 'alerta ' + (error ? 'error' : 'bien'); e.textContent = texto;
+}
+function llamadaEditor(nombre, args, despues) {
+  document.querySelectorAll('#vista-ajustes button').forEach(function (b) { b.disabled = true; });
+  var terminar = function () { document.querySelectorAll('#vista-ajustes button').forEach(function (b) { b.disabled = false; }); };
+  var run = google.script.run.withSuccessHandler(function (r) {
+    terminar(); if (r.ok === false) { avisar(r.mensaje, true); return; }
+    if (r.mensaje) avisar(r.mensaje); if (despues) despues(r);
+  }).withFailureHandler(function (e) { terminar(); avisar(e.message, true); document.getElementById('estadoEditor').textContent = 'No se pudo completar la operación. Recargue el editor para reintentar.'; });
+  run[nombre].apply(run, [TOKEN].concat(args || []));
+}
+function cargarEditor() {
+  document.getElementById('estadoEditor').textContent = 'Leyendo datos de planificación…';
+  llamadaEditor('obtenerEditor', [], function (r) {
+    EDITOR = r; document.getElementById('estadoEditor').textContent = 'Datos cargados. Los cambios del formulario se guardan con sus botones.';
+    document.getElementById('editLocalidad').innerHTML = r.destinos.map(function (d) { return '<option>' + escapar(d[0]) + '</option>'; }).join('');
+    seleccionarDestino(); dibujarEditorPlan(); dibujarConfig();
+  });
+}
+function seleccionarDestino() {
+  if (!EDITOR) return;
+  var d = EDITOR.destinos.find(function (f) { return f[0] === document.getElementById('editLocalidad').value; });
+  if (!d) return;
+  document.getElementById('editDireccion').value = d[2];
+  document.getElementById('editHotel').value = d[5]; document.getElementById('editEnlace').value = d[6];
+}
+function guardarDestinoWeb() {
+  if (!EDITOR) return;
+  llamadaEditor('guardarDestino', [{revision: EDITOR.revisionDestinos,
+    localidad: document.getElementById('editLocalidad').value,
+    direccion: document.getElementById('editDireccion').value,
+    hotel: document.getElementById('editHotel').value,
+    linkCapacitacion: document.getElementById('editEnlace').value}], cargarEditor);
+}
+function opcionesEditor(lista, valor) {
+  return lista.map(function (x) { return '<option value="' + escapar(x) + '"' + (String(x) === String(valor) ? ' selected' : '') + '>' + escapar(x) + '</option>'; }).join('');
+}
+function dibujarEditorPlan() {
+  var dias = Object.keys(DATOS.fechas), lugares = EDITOR.destinos.map(function (d) { return d[0]; });
+  var vehiculos = DATOS.flota.map(function (v) { return v.codigo; });
+  var conductores = DATOS.tecnicos.filter(function (t) { return t.licencia === 'Si'; }).map(function (t) { return t.codigo; });
+  var cab = EDITOR.encabezadosPlan;
+  document.getElementById('editorPlan').innerHTML = '<tr>' + cab.map(function (c) { return '<th>' + escapar(c) + '</th>'; }).join('') + '<th>Acción</th></tr>' + EDITOR.plan.map(function (f, i) {
+    return '<tr>' + cab.map(function (c,j) {
+      var attr = ' aria-label="' + escapar(c) + ', tramo ' + (i+1) + '" data-fila="' + i + '" data-col="' + j + '" onchange="editarCelda(this)"';
+      if (j >= 9) return '<td><input type="checkbox"' + attr + (f[j] === true ? ' checked' : '') + '></td>';
+      var lista = j === 1 ? dias : j === 3 ? ['Camioneta','Bus','Avion','Transporte publico'] : j === 4 ? ['—'].concat(vehiculos) : (j===5 || j===6) ? lugares : j===8 ? ['—'].concat(conductores) : null;
+      if (lista) return '<td><select' + attr + '>' + opcionesEditor(lista, f[j]) + '</select></td>';
+      return '<td><input' + attr + ' type="' + (j===0 || j===7 ? 'number' : 'text') + '" value="' + escapar(f[j]) + '"' + (j===7 ? ' min="0" max="1"' : '') + '></td>';
+    }).join('') + '<td><button class="btn btn-secundario" onclick="quitarTramo(' + i + ')" aria-label="Quitar tramo ' + (i+1) + '">Quitar</button></td></tr>';
+  }).join('');
+}
+function editarCelda(e) { EDITOR.plan[Number(e.dataset.fila)][Number(e.dataset.col)] = e.type === 'checkbox' ? e.checked : e.type === 'number' ? Number(e.value) : e.value; }
+function agregarTramo() {
+  if (!EDITOR) return;
+  var n = EDITOR.plan.reduce(function (a,f) { return Math.max(a,Number(f[0]) || 0); },0)+1;
+  EDITOR.plan.push([n,'D1','C1','Camioneta','V1','BASE','BASE',0,'T01'].concat(EDITOR.encabezadosPlan.slice(9).map(function () { return false; })));
+  dibujarEditorPlan();
+}
+function quitarTramo(i) { EDITOR.plan.splice(i,1); dibujarEditorPlan(); }
+function guardarTramos() { if (EDITOR) llamadaEditor('guardarPlanWeb', [{filas: EDITOR.plan, revision: EDITOR.revisionPlan}], cargarEditor); }
+function dibujarConfig() {
+  document.getElementById('editorConfig').innerHTML = EDITOR.esquema.secciones.map(function (s) {
+    return '<details class="grupo-config"><summary>' + escapar(s.seccion) + '</summary>' + s.parametros.map(function (d) {
+      var valor = EDITOR.parametros[d.clave], bloqueado = d.calculado || d.fuente === 'PDF';
+      var attrs = ' id="cfg-' + d.clave + '"' + (bloqueado ? ' disabled' : '');
+      var valores = d.validacion && d.validacion.valores;
+      var campo;
+      if (valores) campo = '<select' + attrs + '>' + opcionesEditor(valores,valor) + '</select>';
+      else {
+        var tipo = d.tipo === 'fecha' ? 'date' : ['numero','entero','moneda','porcentaje'].indexOf(d.tipo)>=0 ? 'number' : 'text';
+        if (tipo === 'date') valor = String(valor).slice(0,10);
+        campo = '<input' + attrs + ' type="' + tipo + '" step="' + (d.tipo==='entero'?'1':'any') + '" value="' + escapar(valor) + '">';
+      }
+      return '<div class="parametro" data-busqueda="' + escapar((d.etiqueta+' '+d.clave).toLowerCase()) + '"><div><label for="cfg-' + d.clave + '">' + escapar(d.etiqueta) + ' <span class="pastilla neutra">' + escapar(d.fuente) + '</span></label><p class="ayuda">' + escapar(d.nota) + ' · ' + escapar(d.unidad) + '</p></div>' + campo + (bloqueado ? '<span class="chico">' + (d.calculado ? 'Calculado' : 'Dato del caso') + '</span>' : '<button class="btn btn-chico" onclick="guardarConfig(\'' + d.clave + '\')">Guardar</button>') + '</div>';
+    }).join('') + '</details>';
+  }).join('');
+}
+function guardarConfig(clave) { llamadaEditor('guardarParametro', [clave, document.getElementById('cfg-'+clave).value], function () { avisar('Parámetro guardado. Recalcule para aplicar el cambio.'); cargarEditor(); }); }
+function filtrarConfig() {
+  var q = document.getElementById('buscarConfig').value.toLowerCase();
+  document.querySelectorAll('.parametro').forEach(function (e) { e.hidden = !e.dataset.busqueda.includes(q); });
+  if (q) document.querySelectorAll('.grupo-config').forEach(function (e) { e.open = true; });
+}
+function enlaceMaps(desde, hasta) { return 'https://www.google.com/maps/dir/?api=1&origin=' + encodeURIComponent(desde) + '&destination=' + encodeURIComponent(hasta) + '&travelmode=driving'; }
+function dibujarOperacion() {
+  if (!DATOS) return;
+  var R = DATOS.resultado, destinos = {};
+  DATOS.destinos.forEach(function (d) { destinos[d.localidad] = d; });
+  var normalizar = function (s) { return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); };
+  var q = normalizar(document.getElementById('filtroRuta').value), sel = document.getElementById('filtroDiaRuta');
+  var previo = sel.value;
+  sel.innerHTML = '<option value="">Todos los días</option>' + opcionesEditor(Object.keys(DATOS.fechas).filter(function (d) { return R.tramos.some(function (t) { return t.dia===d; }); }),previo);
+  sel.value = previo;
+  var filtrados = R.tramos.filter(function (t) { return (!sel.value || t.dia===sel.value) && normalizar([t.desde,t.hasta,t.cuadrilla,t.tecnicos.join(' ')].join(' ')).includes(q); });
+  document.getElementById('tablaItinerario').innerHTML = '<tr><th>Día / cuadrilla</th><th>Recorrido</th><th>Equipo en terreno</th><th>Servicio</th><th>Traslado / sitio</th><th>Fuente</th><th>Alojamiento</th></tr>' + (filtrados.map(function (t) {
+    var d = destinos[t.hasta] || {}, o = destinos[t.desde] || {};
+    return '<tr><td><b>'+escapar(t.dia)+'</b><br>'+escapar(t.cuadrilla)+'</td><td><a target="_blank" rel="noopener" href="'+escapar(enlaceMaps(o.direccion||t.desde,d.direccion||t.hasta))+'">'+escapar(t.desde)+' → '+escapar(t.hasta)+'</a><div class="chico">'+numero(t.km,1)+' km · '+escapar(t.rutaElegida)+'</div></td><td>'+escapar(t.tecnicos.join(', '))+'<div class="chico">'+escapar(t.vehiculo)+' · conduce '+escapar(t.conductor)+'</div></td><td>'+t.equipos+' equipos<br>'+t.capacitaciones+' capacitaciones</td><td>'+numero(t.horasViaje,2)+' h / '+numero(t.horasEnSitio,2)+' h</td><td><span class="pastilla '+(t.fuenteViaje==='Google Maps'?'ok':'tolerancia')+'">'+escapar(t.fuenteViaje)+'</span></td><td>'+(t.noches? t.noches+' noche · '+escapar(d.hotel || 'Por confirmar'):'Sin pernocta')+'</td></tr>';
+  }).join('') || '<tr><td colspan="7">No hay tramos que coincidan con la búsqueda.</td></tr>');
+  var grupos = {};
+  R.tramos.forEach(function (t) { if(!grupos[t.cuadrilla]) grupos[t.cuadrilla]=[]; grupos[t.cuadrilla].push(t); });
+  document.getElementById('cuadrillas').innerHTML = Object.keys(grupos).map(function (c) {
+    var ts=grupos[c], visitas=ts.filter(function(t){return t.equipos>0;});
+    return '<div class="tarjeta tarjeta-ruta"><span class="pastilla neutra">'+escapar(c)+'</span><h3>'+escapar(ts[0].tecnicos.join(' · '))+'</h3><p>'+visitas.map(function(t){return escapar(t.hasta);}).join(' → ')+'</p><div class="chico">'+ts.length+' tramos · '+visitas.reduce(function(a,t){return a+t.equipos;},0)+' equipos</div></div>';
+  }).join('');
+  document.getElementById('flota').innerHTML = DATOS.flota.map(function(v){
+    var asignados = R.tramos.filter(function(t){return t.vehiculo===v.codigo;});
+    return '<div class="vehiculo"><b>'+escapar(v.codigo)+' · '+escapar(v.modelo)+'</b><p>'+escapar(v.patente || 'Patente por registrar')+'</p><span class="pastilla '+(asignados.length?'neutra':'ok')+'">'+(asignados.length?asignados.length+' tramos asignados':escapar(v.estado)+' · sin asignación')+'</span><p class="chico">Herramientas: '+escapar(v.herramientas)+'</p></div>';
+  }).join('');
+}
+function descargarPlan() {
+  if (!DATOS) return;
+  var filas = [['Escenario','Día','Cuadrilla','Desde','Hasta','Vehículo','Conductor','Técnicos','Equipos','Km','Horas','Noches','Fuente']].concat(DATOS.resultado.tramos.map(function(t){return [DATOS.escenarioActivo,t.dia,t.cuadrilla,t.desde,t.hasta,t.vehiculo,t.conductor,t.tecnicos.join(' / '),t.equipos,t.km,t.horasTramo,t.noches,t.fuenteViaje];}));
+  var csv = '\uFEFF'+filas.map(function(f){return f.map(function(v){var s=String(v==null?'':v); if(/^[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(';');}).join('\r\n');
+  var url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  var a=document.createElement('a');a.href=url;a.download='itinerario-'+DATOS.escenarioActivo+'.csv';a.click();setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+function dibujarGraficosBasicos() {
+  if (!DATOS) return;
+  var R=DATOS.resultado,T=R.totales;
+  var barras=function(id,filas,moneda){
+    var max=Math.max.apply(null,filas.map(function(f){return f[1];}).concat([1]));
+    document.getElementById(id).innerHTML='<div class="barras-accesibles">'+filas.map(function(f){return '<div class="fila-barra"><span>'+escapar(f[0])+'</span><div class="barra-fondo"><div class="barra" style="width:'+Math.max(0,f[1]/max*100)+'%"></div></div><b>'+(moneda?pesos(f[1]):numero(f[1],1))+'</b></div>';}).join('')+'</div>';
+  };
+  barras('graficoGastoLocalidad',R.localidades.map(function(l){return[l.localidad,l.total];}),true);
+  barras('graficoEquipos',R.localidades.map(function(l){return[l.localidad,l.equipos];}));
+  barras('graficoComposicion',[['Combustible',T.combustible],['Peajes',T.peajes],['Desgaste',T.desgaste],['Pasajes',T.pasajes],['Hotel',T.hotel],['Viáticos',T.viatico],['Sobretiempo',T.sobretiempo],['Reserva',T.imprevistos]],true);
+  var dias={};R.tramos.forEach(function(t){dias[t.dia]=(dias[t.dia]||0)+t.subtotal;});
+  barras('graficoGastoDia',Object.keys(dias).sort(function(a,b){return Number(a.slice(1))-Number(b.slice(1));}).map(function(d){return[d,dias[d]];}),true);
+  barras('graficoHoras',R.porTecnico.map(function(t){return[t.tecnico+' · viaje / sitio',t.horasViaje+t.horasEnSitio];}));
+}
+</script>

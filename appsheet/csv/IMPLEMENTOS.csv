@@ -1,0 +1,18 @@
+Item_ID,Orden,Item,Categoria
+I01,1,Multimetro y pinza amperimetrica calibrados,BOLSO
+I02,2,"Crimpeadora, conectores RJ45 y tester de red",BOLSO
+I03,3,"Kit de fibra optica: fusionadora, pigtails y alcohol isopropilico",BOLSO
+I04,4,"Taladro percutor, brocas y tarugos",BOLSO
+I05,5,Set de destornilladores aislados y llaves ajustables,BOLSO
+I06,6,"Amarras, cinta aisladora y canaletas",BOLSO
+I07,7,Equipo de reemplazo ONT/router y repuestos menores,BOLSO
+I08,8,Notebook con software de puesta en marcha y respaldo de configuraciones,BOLSO
+I09,9,Escalera telescopica,VEHICULO
+I10,10,"Extension electrica, conos y senaletica",VEHICULO
+I11,11,"Documentos del vehiculo: permiso de circulacion, revision tecnica, seguro y TAG",VEHICULO
+I12,12,Tarjeta corporativa de combustible,VEHICULO
+I13,13,"EPP: casco, guantes dielectricos, lentes, zapatos de seguridad y arnes",PERSONAL
+I14,14,"Botiquin, agua y linterna frontal",PERSONAL
+I15,15,Celular con datos para reportar avance,PERSONAL
+I16,16,Guia de despacho y acta de conformidad del cliente,PERSONAL
+I17,17,Material de capacitacion enviado al cliente ANTES de llegar,PERSONAL

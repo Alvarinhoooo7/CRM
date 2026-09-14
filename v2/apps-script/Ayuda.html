@@ -1,0 +1,475 @@
+<script>
+/* ==========================================================================
+   SERVICIO TECNICO EN RUTA · v2 · Ayuda.html
+   Capa explicativa. Todo el texto que hace la aplicacion entendible para
+   alguien que la abre por primera vez y no sabe nada del sistema.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. QUE ES CADA PESTAÑA
+   Se inyecta como tarjeta al inicio de cada vista.
+   -------------------------------------------------------------------------- */
+
+var EXPLICACION_VISTA = {
+
+  hoy: {
+    titulo: 'Qué hay que hacer',
+    quees: 'El estado completo del plan en una pantalla: cuánto cuesta, cuántos equipos ' +
+           'faltan, quién va a dónde y qué problemas hay que resolver antes de mandar a ' +
+           'alguien a la ruta.',
+    comoleerlo: [
+      'Arriba están los <b>números grandes</b>. Cada uno trae abajo, en gris, el dato que ' +
+      'ayuda a entenderlo.',
+      'Las <b>alertas rojas</b> son errores: el plan no se puede ejecutar así. Las ' +
+      '<b>amarillas</b> son avisos: no impiden nada, pero conviene mirarlos.',
+      'Las <b>tarjetas de cuadrilla</b> muestran cada grupo que viaja junto, con su ' +
+      'recorrido y sus técnicos.'
+    ],
+    quehacer: 'Si hay alertas rojas, anda a la pantalla 5 y corrige lo que dicen. Si no hay ' +
+              'ninguna, el plan está listo para ejecutarse.'
+  },
+
+  agenda: {
+    titulo: 'Agendar y calendario',
+    quees: 'Acá se agenda un trabajo nuevo. Eliges a dónde y cuántos equipos, y el sistema ' +
+           'calcula solo cuánto sale en camioneta, en bus, en avión o en metro, y cuál ' +
+           'conviene.',
+    comoleerlo: [
+      '<b>Paso 1:</b> destino y cantidad de equipos. Con eso basta, no hay que saber ' +
+      'tarifas ni kilómetros.',
+      'Aparecen las alternativas ordenadas de más barata a más cara, con la recomendada ' +
+      'marcada en verde y <b>el porqué escrito</b>.',
+      '<b>Paso 2:</b> haces clic en un día del calendario. <b>Paso 3:</b> completas la orden ' +
+      'y la guardas.',
+      'Más abajo, la tabla de <b>horas libres</b> dice quién tiene hueco.'
+    ],
+    quehacer: 'El botón "Usar esta opción" rellena el formulario con la recomendación. ' +
+              'Después revisas la fecha, eliges los técnicos y guardas.',
+    ojo: 'Nada se guarda hasta que aprietas "Guardar la orden". El asistente y el simulador ' +
+         'sólo calculan.'
+  },
+
+  dinero: {
+    titulo: 'La plata',
+    quees: 'En qué se gasta, cuánto hay que transferirle a cada técnico y por qué se eligió ' +
+           'cada forma de viajar.',
+    comoleerlo: [
+      'Lo primero es la <b>tabla de transferencias</b>: ese es el monto que se deposita a ' +
+      'cada persona antes de salir.',
+      'La <b>torta</b> muestra en qué se va el dinero. Normalmente el hotel y los viáticos ' +
+      'pesan más que el combustible, y eso sorprende.',
+      'Abajo, el <b>comparador de transporte</b> y los <b>circuitos</b>: cada uno explica ' +
+      'cuál conviene y cuánto se ahorra.'
+    ],
+    quehacer: 'El monto a transferir ya viene redondeado hacia arriba e incluye holgura para ' +
+              'imprevistos.',
+    ojo: 'El <b>gasto total</b> y la <b>suma de las transferencias</b> no son lo mismo, y está ' +
+         'bien. El total incluye lo que paga la empresa directo: desgaste, peajes con TAG, ' +
+         'horas extra. La transferencia es sólo lo que el técnico saca de su bolsillo.'
+  },
+
+  equipo: {
+    titulo: 'El equipo',
+    quees: 'Cuánto trabaja cada persona y qué tiene que hacer. Acá se imprime la hoja de ruta ' +
+           'que se le entrega a cada técnico.',
+    comoleerlo: [
+      'Arriba eliges un técnico y aparece <b>su hoja de ruta completa</b>: dónde va cada día, ' +
+      'con qué vehículo, dónde duerme, cuánta plata recibe y qué llevar.',
+      '<b>Horas en sitio</b> es trabajo real. <b>Horas en traslado</b> es tiempo pagado pero ' +
+      'improductivo.',
+      'La <b>utilización</b> compara las horas asignadas contra las disponibles: 60% ' +
+      'significa que le queda 40% de agenda libre.'
+    ],
+    quehacer: 'El botón descarga la hoja de ruta en PDF para entregársela al técnico.',
+    ojo: 'La ficha individual existe para responder con datos cuando alguien pide aumento o ' +
+         'dice que está sobrecargado.'
+  },
+
+  ajustes: {
+    titulo: 'Ajustes y ayuda',
+    quees: 'Todo lo que se puede cambiar del sistema, más el manual completo con el glosario ' +
+           'y las fórmulas.',
+    comoleerlo: [
+      'El <b>buscador</b> de arriba encuentra cualquier valor: escribe "diésel", "hotel" o ' +
+      '"jornada".',
+      'Los valores que vienen del enunciado del caso aparecen <b>bloqueados a propósito</b>.',
+      'Al final está el <b>manual</b>: cómo se calcula cada hora y cada peso, con ejemplos.'
+    ],
+    quehacer: 'Después de cambiar cualquier valor hay que apretar <b>Recalcular</b>, arriba a ' +
+              'la derecha, para ver el efecto.',
+    ojo: 'Si algo dejó de funcionar, usa "Reparar la configuración" antes de reconstruir. ' +
+         'Reconstruir borra el plan.'
+  }
+};
+
+/* --------------------------------------------------------------------------
+   2. GLOSARIO
+   Cada término que alguien podría no entender.
+   -------------------------------------------------------------------------- */
+
+var GLOSARIO = [
+  { termino: 'Tramo',
+    texto: 'Un traslado desde un punto hasta otro, más el trabajo que se hace al llegar. ' +
+           'Por ejemplo "Base → Talca" es un tramo: incluye manejar hasta Talca e instalar ' +
+           'ahí. Es la unidad con la que se arma todo el plan.' },
+
+  { termino: 'Cuadrilla',
+    texto: 'El grupo de técnicos que viaja junto. En la camioneta caben 3 con sus mochilas; ' +
+           'si hace falta más gente en un destino, se manda otra camioneta. No hay límite de ' +
+           'personas por destino: el sistema calcula cuántas conviene mandar.' },
+
+  { termino: 'Base',
+    texto: 'El punto de partida y regreso de todas las rutas: INACAP Sede Santiago Sur, en ' +
+           'Macul. Todos los kilómetros se miden desde ahí.' },
+
+  { termino: 'Jornada',
+    texto: 'Las horas que trabaja una cuadrilla en un día, contando viaje y trabajo. La ' +
+           'jornada efectiva son 7,4 h. Hasta 8,4 h se considera tolerancia. Sobre eso son ' +
+           'horas extra, y el tope legal absoluto son 10,4 h.' },
+
+  { termino: 'Horas-hombre',
+    texto: 'Horas multiplicadas por personas. Si 3 técnicos trabajan 2 horas, son 6 ' +
+           'horas-hombre. Sirve para medir cuánto tiempo pagado consume una tarea, no ' +
+           'cuánto dura en el reloj.' },
+
+  { termino: 'Horas en sitio',
+    texto: 'Tiempo trabajando de verdad en la casa del cliente: instalar los equipos y ' +
+           'hacer la capacitación. Es el tiempo productivo.' },
+
+  { termino: 'Horas en traslado',
+    texto: 'Tiempo arriba del vehículo, moviéndose. Está pagado igual que el trabajo, pero ' +
+           'no produce nada. Bajarlo es donde está la oportunidad de mejora.' },
+
+  { termino: 'Utilización',
+    texto: 'Qué porcentaje de las horas disponibles de una persona está realmente ocupado. ' +
+           '100% significa agenda llena; 40% significa que le sobra más de la mitad del ' +
+           'tiempo.' },
+
+  { termino: 'Viático',
+    texto: 'Los $25.000 diarios que recibe un técnico cuando trabaja FUERA de la Región ' +
+           'Metropolitana y tiene que quedarse a dormir. Se paga una vez al día, aunque ' +
+           'haga cinco viajes. Si sale y vuelve el mismo día, no corresponde.' },
+
+  { termino: 'Colación',
+    texto: 'Los $5.000 que recibe un técnico que trabaja dentro de Santiago. Como vive acá, ' +
+           'vuelve a dormir a su casa: se le paga el almuerzo, no el viático completo. Nunca ' +
+           'se pagan las dos cosas el mismo día.' },
+
+  { termino: 'Pernoctar',
+    texto: 'Dormir fuera de casa. Cuando un destino queda demasiado lejos para ir y volver ' +
+           'el mismo día, la cuadrilla se queda en un hotel. Cada noche cuesta $50.000 por ' +
+           'persona.' },
+
+  { termino: 'Semáforo de jornada',
+    texto: 'El color que indica si un día de trabajo está dentro de lo normal. Verde: todo ' +
+           'bien. Amarillo: se pasó un poco, se absorbe. Azul: hay horas extra pagadas. ' +
+           'Rojo: se pasó del límite legal y hay que replanificar.' },
+
+  { termino: 'Horas extra',
+    texto: 'Horas trabajadas sobre la jornada contractual. Se pagan con 50% de recargo. A ' +
+           'veces conviene pagarlas: estirar la jornada dos horas cuesta mucho menos que ' +
+           'pagar una noche de hotel para toda la cuadrilla.' },
+
+  { termino: 'Corredor',
+    texto: 'El eje de carretera por el que se llega a un grupo de ciudades. Ruta 5 Norte ' +
+           'lleva a La Calera, Coquimbo y Copiapó. Sirve para agrupar destinos y no repetir ' +
+           'viajes ni peajes.' },
+
+  { termino: 'Plaza de peaje',
+    texto: 'El punto donde se cobra por usar la carretera. Puede ser una caseta con barrera ' +
+           'o un pórtico TAG sin barrera. Cada una tiene su tarifa.' },
+
+  { termino: 'Pórtico TAG',
+    texto: 'El arco que hay sobre las autopistas urbanas y que lee el dispositivo del ' +
+           'parabrisas. Cobra sin que el vehículo se detenga. En Santiago cobran por ' +
+           'kilómetro recorrido.' },
+
+  { termino: 'Categoría 1',
+    texto: 'La clasificación que usan las concesionarias para autos y camionetas. Una ' +
+           'Peugeot Partner paga categoría 1, igual que un auto particular.' },
+
+  { termino: 'Escenario',
+    texto: 'Una forma distinta de hacer el mismo plan. Acá hay dos: el literal del enunciado ' +
+           '(capacitar equipo por equipo) y el de operación real (mandar el material por ' +
+           'correo antes y capacitar una vez por sitio). El sistema calcula los dos para ' +
+           'mostrar la diferencia.' },
+
+  { termino: 'Paralelización',
+    texto: 'Que varios técnicos trabajen al mismo tiempo en el mismo sitio. Tres técnicos ' +
+           'instalando tres equipos se demoran 2 horas, no 6: cada uno toma un equipo.' },
+
+  { termino: 'Primera visita',
+    texto: 'La primera vez que una cuadrilla llega a una localidad. Solo ahí se instala. Si ' +
+           'vuelve a pasar por esa ciudad (por ejemplo para dormir en el regreso), no se ' +
+           'instala nada de nuevo.' },
+
+  { termino: 'Rodeo',
+    texto: 'Tomar un camino alternativo para no pagar peaje. Conviene solo si el tiempo ' +
+           'extra cabe dentro de la jornada; si obliga a pagar horas extra o una noche de ' +
+           'hotel, sale más caro que el peaje.' },
+
+  { termino: 'Equipaje de bodega',
+    texto: 'La maleta que va en la panza del avión, separada del pasajero. Las herramientas ' +
+           'obligatoriamente van ahí: taladros y alicates están prohibidos en cabina. Se ' +
+           'paga aparte del pasaje.' },
+
+  { termino: 'Transferencia',
+    texto: 'La plata que se le deposita a un técnico antes de que salga. Cubre viáticos, ' +
+           'hotel y lo que tenga que pagar de su bolsillo, más una holgura para imprevistos.' }
+];
+
+/* --------------------------------------------------------------------------
+   3. COMO SE CALCULAN LOS TIEMPOS
+   El usuario pidio explicitamente que esto quedara claro.
+   -------------------------------------------------------------------------- */
+
+var EXPLICACION_TIEMPOS = {
+  intro: 'Todo tiempo que aparece en el sistema es tiempo de jornada del técnico: cuenta ' +
+         'desde que sale de la base hasta que vuelve. No se cuenta solo lo que dura el ' +
+         'viaje en sí.',
+
+  bloques: [
+    {
+      titulo: 'Tiempo de instalación',
+      formula: 'redondear hacia arriba (equipos ÷ técnicos) × 2 horas',
+      texto: 'Cada equipo toma 2 horas, pero los técnicos trabajan en paralelo: cada uno ' +
+             'toma un equipo distinto. Por eso 3 equipos con 3 técnicos son 2 horas, no 6.',
+      ejemplos: [
+        '3 equipos, 3 técnicos → 1 vuelta → <b>2 horas</b>',
+        '5 equipos, 3 técnicos → 2 vueltas → <b>4 horas</b>',
+        '1 equipo, 3 técnicos → 1 vuelta → <b>2 horas</b> (sobran manos, no tiempo)'
+      ]
+    },
+    {
+      titulo: 'Tiempo de capacitación',
+      formula: 'sesiones × duración de la sesión',
+      texto: 'Se capacita al cliente, no al equipo. Como al cliente se le manda el material ' +
+             'por correo antes de la visita, la sesión presencial baja de 30 a 15 minutos y ' +
+             'se hace una sola vez por sitio, sin importar cuántos equipos se instalen ahí.',
+      ejemplos: [
+        'Escenario literal del enunciado: 33 sesiones × 30 min = <b>16,5 horas</b>',
+        'Como opera el servicio: 16 sesiones × 15 min = <b>4 horas</b>'
+      ]
+    },
+    {
+      titulo: 'Tiempo de viaje en camioneta',
+      formula: 'tiempo de Google Maps × factor de corrección',
+      texto: 'Google cronometra un auto liviano sin paradas. La camioneta va cargada, para ' +
+             'a cargar combustible y a comer. Por eso se aplica un factor de holgura ' +
+             'configurable (10% por defecto).',
+      ejemplos: [
+        'Maps dice 2,8 h a Talca → el sistema usa <b>3,08 h</b>'
+      ]
+    },
+    {
+      titulo: 'Tiempo de viaje en avión',
+      formula: 'ir al aeropuerto + check-in + vuelo + retiro de equipaje + llegar a la ciudad',
+      texto: 'ACÁ ESTÁ EL ERROR QUE TODOS COMETEN. El tiempo de vuelo no es el tiempo del ' +
+             'viaje. Hay que ir al aeropuerto de Pudahuel, hacer check-in con dos horas de ' +
+             'anticipación porque las herramientas obligan a facturar equipaje, volar, ' +
+             'esperar los bolsos en la cinta, y después llegar del aeropuerto de destino ' +
+             'hasta la ciudad, que suele quedar lejos.',
+      ejemplos: [
+        'Vuelo a Copiapó: 1,6 h en el aire',
+        'Tiempo real puerta a puerta: <b>5,6 h</b>',
+        'El vuelo es apenas el <b>29%</b> del tiempo total'
+      ]
+    },
+    {
+      titulo: 'Tiempo de viaje en bus',
+      formula: 'llegar al terminal + recorrido del bus',
+      texto: 'El bus deja en el terminal de la ciudad, no en la puerta del cliente. Hay que ' +
+             'sumar el traslado hasta el terminal en Santiago y desde el terminal de ' +
+             'destino hasta el sitio.',
+      ejemplos: []
+    },
+    {
+      titulo: 'Jornada de una cuadrilla en un día',
+      formula: 'suma de todos sus tramos de ese día',
+      texto: 'Viaje más trabajo, de todos los tramos que hace esa cuadrilla ese día. Ese ' +
+             'total es el que pinta el semáforo.',
+      ejemplos: [
+        '≤ 7,4 h → <b>OK</b>, dentro de la jornada efectiva',
+        '≤ 8,4 h → <b>TOLERANCIA</b>, se absorbe con el banco de horas',
+        '≤ 10,4 h → <b>SOBRETIEMPO</b>, se paga con 50% de recargo',
+        '> 10,4 h → <b>FUERA DE LEY</b>, hay que replanificar sí o sí'
+      ]
+    }
+  ]
+};
+
+/* --------------------------------------------------------------------------
+   4. COMO SE CALCULA LA PLATA
+   -------------------------------------------------------------------------- */
+
+var EXPLICACION_COSTOS = [
+  { concepto: 'Combustible',
+    formula: 'kilómetros ÷ 20 × precio del litro',
+    texto: 'La Peugeot Partner rinde 20 km por litro. Es dato del enunciado.' },
+
+  { concepto: 'Peajes',
+    formula: 'suma de las plazas que se cruzan',
+    texto: 'Plaza por plaza, con la tarifa oficial del MOP para camioneta. Si dos ciudades ' +
+           'están en el mismo corredor, solo se cobran las plazas que las separan: por eso ' +
+           'ir de Talca a Curicó cuesta $0 en peaje, esas plazas ya se pagaron al bajar.' },
+
+  { concepto: 'Desgaste',
+    formula: 'kilómetros × $60',
+    texto: 'Neumáticos, aceite, filtros y mantención prorrateada por kilómetro. Lo paga la ' +
+           'empresa, no el técnico: por eso no aparece en la transferencia.' },
+
+  { concepto: 'Hotel',
+    formula: 'noches × técnicos × $50.000',
+    texto: 'Valor fijo definido por jefatura, por persona y por noche, en cualquier ciudad.' },
+
+  { concepto: 'Viático',
+    formula: 'días desplegado × técnicos × $25.000',
+    texto: 'Una vez por técnico y por día, aunque haga varios tramos. Incluye la colación, ' +
+           'por eso no hay un ítem de colación aparte.' },
+
+  { concepto: 'Pasajes de avión',
+    formula: 'tarifa × técnicos × 2 tramos + equipaje de bodega × técnicos × 2 tramos',
+    texto: 'La tarifa que se ve en internet no incluye equipaje facturado, y las ' +
+           'herramientas obligan a facturar. Para una cuadrilla de 3 son 6 cobros de ' +
+           'equipaje por viaje, más 4 traslados a los aeropuertos.' },
+
+  { concepto: 'Horas extra',
+    formula: 'horas sobre la jornada × técnicos × costo hora × 1,5',
+    texto: 'El recargo del 50% es legal. Se pagan cuando conviene: dos horas extra para ' +
+           'tres técnicos cuestan $58.500, mientras que una noche de hotel para esos ' +
+           'mismos tres cuesta $225.000 contando el viático del día siguiente.' },
+
+  { concepto: 'Holgura de imprevistos',
+    formula: 'subtotal × 10%',
+    texto: 'Estacionamientos, un repuesto menor, una noche que se alarga. El enunciado pide ' +
+           'cubrir "estadía, colación, peajes y otros": este es el "y otros".' }
+];
+
+/* --------------------------------------------------------------------------
+   5. LAS HERRAMIENTAS
+   Aclaracion pedida por jefatura.
+   -------------------------------------------------------------------------- */
+
+var EXPLICACION_HERRAMIENTAS = {
+  titulo: 'Las herramientas caben en un bolso común',
+  texto: 'Todo lo que se necesita para instalar cabe en un bolso de herramientas normal, ' +
+         'uno por técnico: taladro, destornilladores, crimpeadora, multímetro, tester de ' +
+         'red y repuestos menores. Esto es importante porque significa que la cuadrilla ' +
+         '<b>no depende de la camioneta</b> para poder trabajar: puede viajar en bus o en ' +
+         'avión perfectamente.',
+  consecuencias: [
+    'En <b>bus</b> el bolso viaja gratis en la bodega del vehículo.',
+    'En <b>avión</b> hay que facturarlo como equipaje de bodega y se paga aparte: los ' +
+    'taladros y alicates están prohibidos en cabina por seguridad aérea.',
+    'Lo único que <b>no cabe</b> en un bolso es la escalera telescópica. Si el trabajo la ' +
+    'exige, ese destino se hace en camioneta sí o sí.'
+  ]
+};
+
+/* --------------------------------------------------------------------------
+   6. RENDERIZADO
+   -------------------------------------------------------------------------- */
+
+/** Inserta la tarjeta explicativa al inicio de una vista, una sola vez. */
+function inyectarAyuda(vista) {
+  var e = EXPLICACION_VISTA[vista];
+  if (!e) return;
+
+  var contenedor = document.getElementById('vista-' + vista);
+  if (!contenedor || contenedor.querySelector('.ayuda-vista')) return;
+
+  var caja = document.createElement('div');
+  caja.className = 'tarjeta ayuda-vista';
+  caja.innerHTML =
+    '<div class="ayuda-cabecera">' +
+      '<h2>¿Qué es esta pantalla?</h2>' +
+      '<button class="btn btn-chico btn-secundario" onclick="alternarAyuda(this)">Ocultar</button>' +
+    '</div>' +
+    '<div class="ayuda-cuerpo">' +
+      '<p class="ayuda-quees">' + e.quees + '</p>' +
+      '<div class="ayuda-columnas">' +
+        '<div><h3>Cómo leerlo</h3><ul>' +
+          e.comoleerlo.map(function (x) { return '<li>' + x + '</li>'; }).join('') +
+        '</ul></div>' +
+        '<div><h3>Qué hacer con esto</h3><p>' + e.quehacer + '</p>' +
+          (e.ojo ? '<div class="ayuda-ojo"><b>Ojo:</b> ' + e.ojo + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  contenedor.insertBefore(caja, contenedor.firstChild);
+}
+
+function alternarAyuda(boton) {
+  var cuerpo = boton.closest('.ayuda-vista').querySelector('.ayuda-cuerpo');
+  var oculto = cuerpo.style.display === 'none';
+  cuerpo.style.display = oculto ? '' : 'none';
+  boton.textContent = oculto ? 'Ocultar' : 'Mostrar explicación';
+}
+
+/** Arma el manual completo dentro de la pestaña Guía. */
+function dibujarManual() {
+  var destino = document.getElementById('manualCompleto');
+  if (!destino) return;
+
+  var html = '';
+
+  // --- Como se calculan los tiempos ------------------------------------
+  html += '<div class="tarjeta"><h2>Cómo se calculan los tiempos</h2>' +
+          '<p class="ayuda">' + EXPLICACION_TIEMPOS.intro + '</p>';
+
+  EXPLICACION_TIEMPOS.bloques.forEach(function (b) {
+    html += '<div class="bloque-explica">' +
+      '<h3>' + b.titulo + '</h3>' +
+      '<div class="formula">' + b.formula + '</div>' +
+      '<p>' + b.texto + '</p>' +
+      (b.ejemplos.length
+        ? '<ul class="ejemplos">' + b.ejemplos.map(function (x) {
+            return '<li>' + x + '</li>'; }).join('') + '</ul>'
+        : '') +
+      '</div>';
+  });
+  html += '</div>';
+
+  // --- Como se calcula la plata ----------------------------------------
+  html += '<div class="tarjeta"><h2>Cómo se calcula cada peso</h2>' +
+    '<div class="tabla-envoltorio"><table class="datos">' +
+    '<tr><th>Concepto</th><th>Fórmula</th><th>Explicación</th></tr>' +
+    EXPLICACION_COSTOS.map(function (c) {
+      return '<tr><td><b>' + c.concepto + '</b></td>' +
+        '<td class="chico"><code>' + c.formula + '</code></td>' +
+        '<td class="chico">' + c.texto + '</td></tr>';
+    }).join('') + '</table></div></div>';
+
+  // --- Herramientas -----------------------------------------------------
+  var h = EXPLICACION_HERRAMIENTAS;
+  html += '<div class="tarjeta"><h2>' + h.titulo + '</h2>' +
+    '<p>' + h.texto + '</p><ul class="ejemplos">' +
+    h.consecuencias.map(function (x) { return '<li>' + x + '</li>'; }).join('') +
+    '</ul></div>';
+
+  // --- Glosario ----------------------------------------------------------
+  html += '<div class="tarjeta"><h2>Glosario</h2>' +
+    '<p class="ayuda">Cada palabra del sistema que podría no significar nada para alguien ' +
+    'que lo abre por primera vez.</p>' +
+    '<input type="search" id="buscarGlosario" placeholder="Buscar una palabra…" ' +
+    'oninput="filtrarGlosario()" style="margin-bottom:14px">' +
+    '<div id="listaGlosario">' +
+    GLOSARIO.map(function (g) {
+      return '<div class="termino" data-termino="' + g.termino.toLowerCase() + '">' +
+        '<b>' + g.termino + '</b><p>' + g.texto + '</p></div>';
+    }).join('') + '</div></div>';
+
+  destino.innerHTML = html;
+}
+
+function filtrarGlosario() {
+  var texto = (document.getElementById('buscarGlosario').value || '').toLowerCase();
+  document.querySelectorAll('#listaGlosario .termino').forEach(function (el) {
+    var coincide = !texto ||
+      el.dataset.termino.indexOf(texto) !== -1 ||
+      el.textContent.toLowerCase().indexOf(texto) !== -1;
+    el.style.display = coincide ? '' : 'none';
+  });
+}
+</script>

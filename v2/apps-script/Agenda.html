@@ -1,0 +1,124 @@
+<script>
+var AGENDA=null, MES_AGENDA='', DIA_AGENDA='', PREVIA_AGENDA=null, EDITANDO_AGENDA=null, CARGANDO_AGENDA=false;
+function rpcAgenda(nombre,args){return new Promise(function(resolve,reject){var run=google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);run[nombre].apply(run,[TOKEN].concat(args||[]));});}
+function mensajeAgenda(texto,error){var e=document.getElementById('mensajeAgenda');e.className='alerta '+(error?'error':'bien');e.textContent=texto;}
+async function cargarAgenda(){
+  if(CARGANDO_AGENDA)return;CARGANDO_AGENDA=true;
+  try{AGENDA=await rpcAgenda('obtenerAgenda');if(!DIA_AGENDA)DIA_AGENDA=AGENDA.fechaHoy;if(!MES_AGENDA)MES_AGENDA=DIA_AGENDA.slice(0,7);dibujarCalendarioAgenda();dibujarResumenAgenda();dibujarAgendaTecnico();}
+  catch(e){mensajeAgenda(e.message,true);}finally{CARGANDO_AGENDA=false;}
+}
+function fechaEventoAgenda(valor){return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(valor));}
+function dibujarResumenAgenda(){
+  if(!AGENDA)return;var activas=AGENDA.ordenes.filter(function(o){return o.estado!=='CANCELADA';});
+  document.getElementById('resumenAgenda').textContent=activas.length+' órdenes · '+activas.reduce(function(a,o){return a+o.equipos;},0)+' equipos · '+pesos(activas.reduce(function(a,o){return a+o.presupuesto.total;},0))+' presupuestados';
+  document.getElementById('tablaCostosAgenda').innerHTML='<tr><th>Orden / cliente</th><th>Fecha</th><th>Decisión</th><th>Estado</th><th>Total</th></tr>'+ (activas.map(function(o){return '<tr><td>'+escapar(o.cliente)+'</td><td>'+o.fecha+'</td><td>'+escapar(o.modo)+'</td><td>'+escapar(o.estado)+'</td><td>'+pesos(o.presupuesto.total)+'</td></tr>';}).join('')||'<tr><td colspan="5">Todavía no hay órdenes agendadas.</td></tr>');
+}
+function dibujarAgendaTecnico(){
+  if(!AGENDA)return;var codigo=document.getElementById('selectorOrden').value;
+  var ordenes=AGENDA.ordenes.filter(function(o){return o.estado!=='CANCELADA'&&o.tecnicos.indexOf(codigo)>=0;});
+  document.getElementById('agendaTecnicoOrden').innerHTML=ordenes.map(function(o){return '<p><b>'+escapar(o.cliente)+'</b> · '+o.fecha+' '+o.hora+' · '+escapar(o.modo)+'<br>'+escapar(o.direccion)+'<br>'+o.equipos+' equipos · '+escapar(o.hotel||'Sin pernocta')+'</p><button class="btn btn-secundario" onclick="abrirDetalleAgenda(\''+o.id+'\')">Ver presupuesto y estado</button>';}).join('')||'<p>Sin órdenes adicionales para este técnico.</p>';
+}
+function abrirDetalleAgenda(id){mostrar('calendario');var o=AGENDA.ordenes.find(function(x){return x.id===id;});DIA_AGENDA=o.fecha;MES_AGENDA=o.fecha.slice(0,7);dibujarCalendarioAgenda();verOrdenAgenda(id);}
+function eventosAgenda(){
+  var eventos=[];
+  if(DATOS)(DATOS.resultado.tramos||[]).forEach(function(t){if(!DATOS.fechas[t.dia])return;eventos.push({fecha:fechaEventoAgenda(DATOS.fechas[t.dia]),titulo:t.cuadrilla+' · '+t.desde+' → '+t.hasta,tipo:'plan',detalle:t});});
+  if(AGENDA)AGENDA.ordenes.filter(function(o){return o.estado!=='CANCELADA';}).forEach(function(o){o.bloques.forEach(function(b){eventos.push({fecha:b.fecha,titulo:b.inicio+' · '+o.cliente,tipo:'orden',detalle:o});});});
+  return eventos;
+}
+function dibujarCalendarioAgenda(){
+  if(!AGENDA)return;
+  var primer=new Date(MES_AGENDA+'-01T12:00:00Z'),inicio=new Date(primer);
+  inicio.setUTCDate(1-((primer.getUTCDay()+6)%7));
+  document.getElementById('tituloMesAgenda').textContent=primer.toLocaleDateString('es-CL',{month:'long',year:'numeric',timeZone:'UTC'});
+  var eventos=eventosAgenda(),html='';
+  for(var i=0;i<42;i++){
+    var f=new Date(inicio);f.setUTCDate(inicio.getUTCDate()+i);var iso=f.toISOString().slice(0,10),lista=eventos.filter(function(e){return e.fecha===iso;});
+    html+='<button type="button" class="dia-agenda '+(iso.slice(0,7)!==MES_AGENDA?'otro-mes ':'')+(iso===DIA_AGENDA?'seleccionado ':'')+(iso===AGENDA.fechaHoy?'es-hoy':'')+'" onclick="seleccionarDiaAgenda(\''+iso+'\')" aria-label="'+iso+', '+lista.length+' actividades"><span class="numero-dia">'+f.getUTCDate()+'</span>'+lista.slice(0,3).map(function(e){return '<span class="evento-agenda '+e.tipo+'">'+escapar(e.titulo)+'</span>';}).join('')+(lista.length>3?'<span class="chico">+'+(lista.length-3)+' actividades</span>':'')+'</button>';
+  }
+  document.getElementById('rejillaAgenda').innerHTML=html;
+  dibujarDiaAgenda();
+}
+function seleccionarDiaAgenda(iso){DIA_AGENDA=iso;dibujarCalendarioAgenda();}
+function moverMesAgenda(delta){var f=new Date(MES_AGENDA+'-01T12:00:00Z');f.setUTCMonth(f.getUTCMonth()+delta);MES_AGENDA=f.toISOString().slice(0,7);dibujarCalendarioAgenda();}
+function hoyAgenda(){if(!AGENDA)return;DIA_AGENDA=AGENDA.fechaHoy;MES_AGENDA=DIA_AGENDA.slice(0,7);dibujarCalendarioAgenda();}
+function dibujarDiaAgenda(){
+  document.getElementById('tituloDiaAgenda').textContent=new Date(DIA_AGENDA+'T12:00:00Z').toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'});
+  var eventos=eventosAgenda().filter(function(e){return e.fecha===DIA_AGENDA;});
+  document.getElementById('detalleDiaAgenda').innerHTML='<button class="btn btn-ancho" onclick="nuevaOrdenAgenda()">Agendar en este día</button>'+(eventos.length?eventos.map(function(e){
+    var o=e.detalle;
+    if(e.tipo==='plan')return '<article class="actividad-dia plan"><span class="pastilla neutra">PLAN DEL CASO</span><h3>'+escapar(o.desde)+' → '+escapar(o.hasta)+'</h3><p>'+escapar(o.modo)+' · '+escapar(o.vehiculo)+'<br>'+escapar(o.tecnicos.join(', '))+'<br>'+o.equipos+' equipos</p><p class="chico">Sin hora exacta en PLAN: recursos reservados todo el día.</p></article>';
+    var b=o.bloques.find(function(x){return x.fecha===DIA_AGENDA;});
+    return '<article class="actividad-dia"><span class="pastilla ok">'+escapar(o.estado)+'</span><h3>'+escapar(o.cliente)+'</h3><p>'+b.inicio+'–'+b.fin+' · '+o.equipos+' equipos<br>'+escapar(o.direccion)+'<br>'+escapar(o.modo)+' '+escapar(o.vehiculo)+'<br>'+escapar(o.tecnicos.join(', '))+'</p><b>'+pesos(o.presupuesto.total)+'</b><div class="acciones-editor"><button class="btn btn-chico" onclick="verOrdenAgenda(\''+escapar(o.id)+'\')">Ver detalle</button>'+(o.estado==='AGENDADA'?'<button class="btn btn-chico btn-secundario" onclick="editarOrdenAgenda(\''+escapar(o.id)+'\')">Editar</button>':'')+'</div></article>';
+  }).join(''):'<p>No hay servicios este día. Puedes crear una nueva orden.</p>');
+}
+function cerrarFormularioAgenda(){document.getElementById('formularioAgenda').classList.add('oculto');}
+async function nuevaOrdenAgenda(){
+  if(!AGENDA)await cargarAgenda();if(!AGENDA)return;
+  EDITANDO_AGENDA=null;document.getElementById('formOrdenAgenda').reset();
+  document.getElementById('agendaFecha').value=DIA_AGENDA||AGENDA.fechaHoy;
+  document.getElementById('agendaTecnicos').innerHTML=AGENDA.tecnicos.map(function(t){return '<label><input type="checkbox" name="agendaTecnico" value="'+escapar(t.codigo)+'"> '+escapar(t.codigo+' · '+t.nombre)+'</label>';}).join('');
+  document.getElementById('agendaVehiculo').innerHTML='<option value="">Elegir camioneta</option>'+AGENDA.flota.filter(function(v){return v.estado==='Disponible';}).map(function(v){return '<option value="'+escapar(v.codigo)+'">'+escapar(v.codigo+' · '+v.modelo)+'</option>';}).join('');
+  document.getElementById('agendaConductor').innerHTML='<option value="">Elegir conductor</option>'+AGENDA.tecnicos.filter(function(t){return t.licencia==='Si';}).map(function(t){return '<option>'+escapar(t.codigo)+'</option>';}).join('');
+  document.getElementById('tituloFormularioAgenda').textContent='Nueva orden de servicio';
+  document.getElementById('formularioAgenda').classList.remove('oculto');invalidarPreviaAgenda();
+  document.getElementById('formularioAgenda').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function solicitudAgenda(){
+  var valor=function(id){return document.getElementById(id).value;};
+  var cot=function(tipo){return {pasaje:valor('cot'+tipo+'Pasaje'),horas:valor('cot'+tipo+'Horas'),conexiones:valor('cot'+tipo+'Conexiones'),flete:valor('cot'+tipo+'Flete')};};
+  return {id:EDITANDO_AGENDA?EDITANDO_AGENDA.id:'',revision:EDITANDO_AGENDA?EDITANDO_AGENDA.revision:0,
+    cliente:valor('agendaCliente'),direccion:valor('agendaDireccion'),equipos:valor('agendaEquipos'),fecha:valor('agendaFecha'),hora:valor('agendaHora'),dias:valor('agendaDias'),
+    tecnicos:Array.from(document.querySelectorAll('input[name="agendaTecnico"]:checked')).map(function(e){return e.value;}),
+    vehiculo:valor('agendaVehiculo'),conductor:valor('agendaConductor'),peajes:valor('agendaPeajes'),hotel:valor('agendaHotel'),
+    herramientas:document.getElementById('agendaHerramientas').checked,notas:valor('agendaNotas'),bus:cot('Bus'),avion:cot('Avion'),publico:cot('Publico')};
+}
+function invalidarPreviaAgenda(){PREVIA_AGENDA=null;document.getElementById('comparacionAgenda').innerHTML='';document.getElementById('btnGuardarAgenda').classList.add('oculto');}
+function tablaPresupuestoAgenda(opciones,seleccionable){
+  var filas=[['Combustible','combustible'],['Peajes','peajes'],['Desgaste','desgaste'],['Pasajes de la cuadrilla','pasajes'],['Conexiones','conexiones'],['Flete de herramientas','flete'],['Alojamiento','hotel'],['Viáticos','viatico']];
+  return '<div class="tabla-envoltorio"><table class="datos comparador-orden"><tr><th>Concepto</th>'+opciones.map(function(o){return '<th>'+escapar(o.modo)+'</th>';}).join('')+'</tr>'+filas.map(function(f){return '<tr><td>'+f[0]+'</td>'+opciones.map(function(o){return '<td class="num">'+pesos(o.costos[f[1]])+'</td>';}).join('')+'</tr>';}).join('')+
+    [['Reserva','reserva',true],['Total estimado*','total',true],['Horas de viaje','horasViaje',false],['Horas de instalación','horasInstalacion',false],['Horas de capacitación','horasCapacitacion',false],['Horas totales de actividad','horasTotales',false]].map(function(f){return '<tr><th>'+f[0]+'</th>'+opciones.map(function(o){return '<td class="num"><b>'+(f[2]?pesos(o[f[1]]):numero(o[f[1]],2))+'</b></td>';}).join('')+'</tr>';}).join('')+
+    '<tr><th>Validación / decisión</th>'+opciones.map(function(o,i){return '<td>'+(o.completa?(seleccionable?'<label><input type="radio" name="modoAgenda" value="'+i+'"> Elegir '+escapar(o.modo)+'</label>':'Datos completos'):'<b>Faltan datos o disponibilidad</b><ul>'+o.pendientes.map(function(p){return '<li>'+escapar(p)+'</li>';}).join('')+'</ul>')+'</td>';}).join('')+'</tr></table></div><p class="ayuda">* En opciones incompletas se muestra solo la suma de conceptos conocidos: no es una cotización completa ni una recomendación. Todas incluyen ida y regreso, instalación y capacitación literal. Las estimaciones no compran pasajes ni reservan hoteles.</p>';
+}
+async function compararAgenda(){
+  var boton=document.getElementById('btnCompararAgenda'),solicitud=solicitudAgenda(),firma=JSON.stringify(solicitud);boton.disabled=true;invalidarPreviaAgenda();
+  mensajeAgenda('Consultando ida y regreso y comparando tus alternativas…');
+  try{var r=await rpcAgenda('previsualizarOrden',[solicitud]);if(JSON.stringify(solicitudAgenda())!==firma){mensajeAgenda('Los datos cambiaron durante la consulta. Vuelve a comparar.',true);return;}
+    PREVIA_AGENDA={respuesta:r,firma:firma};document.getElementById('comparacionAgenda').innerHTML=tablaPresupuestoAgenda(r.opciones,true);
+    document.getElementById('btnGuardarAgenda').classList.remove('oculto');mensajeAgenda(r.mensaje);
+  }catch(e){mensajeAgenda(e.message,true);}finally{boton.disabled=false;}
+}
+async function confirmarOrdenAgenda(){
+  if(!PREVIA_AGENDA||PREVIA_AGENDA.firma!==JSON.stringify(solicitudAgenda())){mensajeAgenda('Los datos cambiaron. Calcula otra vez.',true);return;}
+  var seleccion=document.querySelector('input[name="modoAgenda"]:checked');if(!seleccion){mensajeAgenda('Elige una alternativa antes de agendar.',true);return;}
+  var boton=document.getElementById('btnGuardarAgenda');boton.disabled=true;
+  try{var r=await rpcAgenda('guardarOrdenAgenda',[PREVIA_AGENDA.respuesta.previa,PREVIA_AGENDA.respuesta.opciones[Number(seleccion.value)].modo]);
+    DIA_AGENDA=r.orden.fecha;MES_AGENDA=DIA_AGENDA.slice(0,7);cerrarFormularioAgenda();mensajeAgenda(r.mensaje);await cargarAgenda();
+  }catch(e){mensajeAgenda(e.message,true);}finally{boton.disabled=false;}
+}
+async function editarOrdenAgenda(id){
+  var o=AGENDA.ordenes.find(function(x){return x.id===id;});if(!o)return;
+  await nuevaOrdenAgenda();EDITANDO_AGENDA=o;
+  [['agendaCliente','cliente'],['agendaDireccion','direccion'],['agendaEquipos','equipos'],['agendaFecha','fecha'],['agendaHora','hora'],['agendaDias','dias'],['agendaHotel','hotel'],['agendaVehiculo','vehiculo'],['agendaConductor','conductor'],['agendaPeajes','peajes'],['agendaNotas','notas']].forEach(function(par){document.getElementById(par[0]).value=o[par[1]]==null?'':o[par[1]];});
+  document.getElementById('agendaHerramientas').checked=o.herramientas;
+  document.querySelectorAll('input[name="agendaTecnico"]').forEach(function(e){e.checked=o.tecnicos.indexOf(e.value)>=0;});
+  [['Bus','bus'],['Avion','avion'],['Publico','publico']].forEach(function(par){['Pasaje','Horas','Conexiones','Flete'].forEach(function(c){document.getElementById('cot'+par[0]+c).value=(o[par[1]]||{})[c.toLowerCase()]||'';});});
+  document.getElementById('tituloFormularioAgenda').textContent='Editar '+o.id;invalidarPreviaAgenda();
+}
+function verOrdenAgenda(id){
+  var o=AGENDA.ordenes.find(function(x){return x.id===id;});if(!o)return;
+  var acciones=o.estado==='AGENDADA'?['EN_CURSO','CANCELADA']:o.estado==='EN_CURSO'?['COMPLETADA','CANCELADA']:[];
+  document.getElementById('detalleDiaAgenda').innerHTML='<h3>'+escapar(o.cliente)+'</h3><p>'+escapar(o.id)+' · '+escapar(o.estado)+'</p><p>'+escapar(o.direccion)+'<br>'+o.equipos+' equipos · '+escapar(o.modo)+'<br>'+escapar(o.tecnicos.join(', '))+'<br>'+escapar(o.hotel||'Sin pernocta')+'</p>'+tablaPresupuestoAgenda([o.presupuesto],false)+'<h3>Fondos por técnico</h3>'+o.presupuesto.transferencias.map(function(t){return '<p>'+escapar(t.tecnico)+' · '+pesos(t.total)+'</p>';}).join('')+'<p class="chico">El gasto compartido se adelanta al conductor en camioneta o al primer técnico seleccionado en otros medios. Incluye reserva y redondeo; desgaste no se adelanta.</p>'+acciones.map(function(e){return '<button class="btn btn-secundario" onclick="estadoOrdenAgenda(\''+escapar(o.id)+'\','+o.revision+',\''+e+'\')">'+(e==='EN_CURSO'?'Iniciar':e==='COMPLETADA'?'Marcar completada':'Cancelar orden')+'</button>';}).join('');
+}
+async function estadoOrdenAgenda(id,revision,estado){
+  if(!confirm('¿Confirmar '+estado+' para esta orden?'))return;
+  try{var r=await rpcAgenda('cambiarEstadoAgenda',[id,revision,estado]);mensajeAgenda(r.mensaje);await cargarAgenda();}catch(e){mensajeAgenda(e.message,true);}
+}
+async function probarMapsWeb(){
+  var b=document.getElementById('btnDiagnosticoMaps');b.disabled=true;document.getElementById('estadoMaps').textContent='Probando una ruta desde la base…';
+  try{var r=await rpcAgenda('diagnosticarMaps',[]);document.getElementById('estadoMaps').textContent=r.proveedor+': '+r.mensaje;}catch(e){document.getElementById('estadoMaps').textContent=e.message;}finally{b.disabled=false;}
+}
+async function actualizarLoteMaps(){
+  var b=document.getElementById('btnActualizarMaps');b.disabled=true;document.getElementById('estadoMaps').textContent='Actualizando un lote. Las rutas correctas se conservan…';
+  try{var r=await rpcAgenda('actualizarMapsWeb');document.getElementById('estadoMaps').textContent=r.mensaje+(r.errores.length?' '+r.errores.join(' '):'');cargarTablero(true,DATOS?DATOS.escenarioActivo:null);}catch(e){document.getElementById('estadoMaps').textContent=e.message;}finally{b.disabled=false;}
+}
+</script>

@@ -2,3 +2,6 @@ apps-script/.clasp.json
 .local-backup/
 node_modules/
 .claude/settings.local.json
+**/.clasp.json
+.local-browser/
+v2/tests/*.local.json

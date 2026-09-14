@@ -1,0 +1,17 @@
+Localidad,Region,Direccion,En_RM,Equipos_PDF,Hotel_Zona,Km_Ida,Peaje_Ida,Corredor
+Maipu,Metropolitana,"Av. 5 de Abril 0260, Maipu, Santiago, Chile",Si,3,No aplica,18,0,URB
+Pudahuel,Metropolitana,"Av. San Pablo 8444, Pudahuel, Santiago, Chile",Si,3,No aplica,22,0,URB
+Santiago,Metropolitana,"Plaza de Armas 444, Santiago Centro, Santiago, Chile",Si,3,No aplica,10,1300,URB
+Puente Alto,Metropolitana,"Concha y Toro 1820, Puente Alto, Santiago, Chile",Si,1,No aplica,24,2200,URB
+Lo Barnechea,Metropolitana,"Av. Lo Barnechea 1210, Lo Barnechea, Santiago, Chile",Si,3,No aplica,22,2400,URB
+Melipilla,Metropolitana,"Serrano 1550, Melipilla, Chile",Si,2,No aplica,68,2800,R78
+San Antonio,Valparaiso,"Av. Barros Luco 1881, San Antonio, Chile",No,2,No aplica,108,5600,R78
+La Calera,Valparaiso,"J. J. Perez 351, La Calera, Chile",No,1,No aplica,110,3900,R5N
+Coquimbo,Coquimbo,"Bilbao 330, Coquimbo, Chile",No,2,Centro de Coquimbo,470,18100,R5N
+Copiapo,Atacama,"Chacabuco 546, Copiapo, Chile",No,5,Centro de Copiapo,800,25500,R5N
+Curico,Maule,"Carmen 360, Curico, Chile",No,1,No aplica,195,7600,R5S
+Talca,Maule,"1 Sur 835, Talca, Chile",No,3,Centro de Talca,255,11000,R5S
+San Pedro de la Paz,Biobio,"Los Alamos 2093, San Pedro de la Paz, Chile",No,1,Centro de Concepcion,505,20600,R5S
+Penco,Biobio,"Penco, Biobio, Chile",No,1,Centro de Concepcion,520,20600,R5S
+Santa Juana,Biobio,"Irarrazaval 320, Santa Juana, Chile",No,1,Centro de Concepcion,530,20600,R5S
+Tome,Biobio,"Tome, Biobio, Chile",No,1,Centro de Concepcion,545,20600,R5S

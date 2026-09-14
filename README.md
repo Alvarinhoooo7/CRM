@@ -1,5 +1,9 @@
 # Servicio Técnico en Ruta
 
+> **Migración en curso a planilla funcional + AppSheet (14-09-2026).** La implementación nueva está en `apps-script/`; todavía no reemplaza la operación remota. Para continuar, leer [checklist detallado](ESTADO_IMPLEMENTACION.md), [especificación conciliada](docs/ESPECIFICACION_CONCILIADA.md), [instalación y corte](docs/OPERACION_Y_MIGRACION.md) y [configuración AppSheet](appsheet/CONFIGURACION_FUNCIONAL.md).
+>
+> Pruebas locales: `node scripts/check-sintaxis.js`, `node tests/planilla.cjs`, `node tests/hojas.cjs`. El proyecto remoto recibió únicamente la función `prepararMigracionPlanillaFuncional` para respaldar el libro; conserva la aplicación anterior. El contenido que sigue documenta esa versión y se retirará al validar el corte.
+
 **Estudio de caso 2 · Tecnología Aplicada a Sistemas Inteligentes · INACAP Sede Santiago Sur**
 Entrega: 14-09-2026 · Grupo de 4 integrantes
 

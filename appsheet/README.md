@@ -1,5 +1,7 @@
 # App del técnico en AppSheet · Estudio de caso 2
 
+> **Flujo anterior, pendiente de retirar al efectuar la migración.** La nueva aplicación se conecta directamente al spreadsheet y se configura con [CONFIGURACION_FUNCIONAL.md](CONFIGURACION_FUNCIONAL.md). No generar ni importar estos CSV para la nueva implementación. Estado y pendientes: [ESTADO_IMPLEMENTACION.md](../ESTADO_IMPLEMENTACION.md).
+
 Cubre lo que pide el PDF del caso 2, textualmente:
 
 > "cada técnico pueda verificar **su ruta**, **sus implementos y materiales a utilizar**,

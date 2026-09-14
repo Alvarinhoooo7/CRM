@@ -5,3 +5,4 @@ node_modules/
 **/.clasp.json
 .local-browser/
 v2/tests/*.local.json
+.obsidian/

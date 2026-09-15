@@ -29,6 +29,8 @@ var rolElegido = 'supervisor';
 
 function iniciar() {
   cargarEstado();
+  /* La solicitud del usuario incluye poblar el panel financiero. Una sola vez. */
+  if (cargarEscenarioFinanciero(estado)) { recalcular(); persistir(); }
   suscribir(function () {
     if (sesion.rol === 'supervisor') { dibujarPestanaSupervisor(); }
     else if (sesion.rol === 'coordinador') { dibujarPestanaCoordinador(); }
@@ -41,6 +43,7 @@ function iniciar() {
 
 function dibujarAcceso() {
   var raiz = el('#aplicacion');
+  raiz.onclick = raiz.onchange = raiz.oninput = null;
   raiz.className = '';
   raiz.innerHTML =
     '<div class="pantalla-acceso"><div class="acceso">'
@@ -67,11 +70,7 @@ function dibujarAcceso() {
     + '<div class="campo"><span>&nbsp;</span><button type="submit" class="boton">Ingresar</button></div>'
     + '</div>'
     + '<div id="error-acceso"></div>'
-    + '<div class="aviso-demo">Demostración local. Los tres accesos usan la contraseña <strong>'
-    + esc(CLAVE_DEMO) + '</strong> y vienen autocompletados: solo aprieta Ingresar. '
-    + 'Esto no es un sistema de autenticación y no protege ningún dato.'
-    + (almacen.disponible() ? '' : ' El navegador bloqueo el almacenamiento local, asi que al recargar la página se pierde lo que hagas.')
-    + '</div>'
+    + (almacen.disponible() ? '' : '<p class="nota">El almacenamiento no est\u00e1 disponible. Los cambios se perder\u00e1n al cerrar.</p>')
     + '</form>'
     + '</div></div>';
 
@@ -99,7 +98,7 @@ function intentarAcceso() {
   var clave = String(datos.clave || '');
 
   if (clave !== CLAVE_DEMO) {
-    el('#error-acceso').innerHTML = '<p class="error-acceso">La contraseña de la demostración es ' + esc(CLAVE_DEMO) + '.</p>';
+    el('#error-acceso').innerHTML = '<p class="error-acceso">La clave de acceso es ' + esc(CLAVE_DEMO) + '.</p>';
     return;
   }
 
@@ -125,6 +124,7 @@ function intentarAcceso() {
 function abrirVista(rol, correo, idTecnico) {
   sesion = { rol: rol, correo: correo, idTecnico: idTecnico };
   var raiz = el('#aplicacion');
+  raiz.onclick = raiz.onchange = raiz.oninput = null;
   raiz.innerHTML = '';
   if (rol === 'supervisor') { pestanaSupervisor = 'resumen'; dibujarSupervisor(raiz); }
   else if (rol === 'coordinador') { pestanaCoordinador = 'ordenes'; dibujarCoordinador(raiz); }
@@ -142,9 +142,9 @@ function cerrarSesion() {
 function pedirReinicio() {
   var caja = el('#confirmacion');
   caja.innerHTML = '<div class="modal-fondo"><div class="modal">'
-    + '<h2>Reiniciar la demostración</h2>'
+    + '<h2>Restablecer plan</h2>'
     + '<p>Vuelve al plan inicial: 15 jornadas, 30 órdenes y 33 equipos por instalar. '
-    + 'Se borran los hitos, los comprobantes, los correos enviados y los cambios de parámetros.</p>'
+    + 'Se reemplazan los hitos, rendiciones, avisos y parámetros por los del escenario inicial. Esta acción descarta tus cambios.</p>'
     + '<div style="display:flex;gap:.5rem;justify-content:flex-end">'
     + '<button class="boton secundario" data-confirmar="no">Cancelar</button>'
     + '<button class="boton peligro" data-confirmar="si">Reiniciar</button>'
@@ -161,9 +161,11 @@ function pedirReinicio() {
       despachar('reiniciar', {});
       ordenActiva = null;
       propuestaActual = null;
+      borradorTrabajo = null;
+      destinoCorreoSeleccionado = null;
       seleccionAsignacion = { jornada: null, tecnicos: [], conductor: null, vehiculo: null };
       abrirVista(sesion.rol, sesion.correo, sesion.idTecnico);
-      alertaSuave('Demostración reiniciada.', 'ruta');
+      alertaSuave('Plan restablecido.', 'ruta');
     }
   });
 }

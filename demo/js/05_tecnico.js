@@ -3,6 +3,7 @@
 
 var pantallaTecnico = 'hoy';
 var ordenActiva = null;
+var filtroOrdenes = 'pendientes';
 var firmaLienzo = null;
 var firmaContexto = null;
 var firmaDibujando = false;
@@ -35,8 +36,8 @@ function dibujarTecnico(contenedor) {
     + '</div></div>'
     + '</div>';
 
-  contenedor.addEventListener('click', manejarAccionTecnico);
-  contenedor.addEventListener('change', manejarCambioTecnico);
+  contenedor.onclick = manejarAccionTecnico;
+  contenedor.onchange = manejarCambioTecnico;
 
   dibujarPantallaTecnico(true);
 }
@@ -71,7 +72,7 @@ function dibujarPantallaTecnico(volverAlTope) {
   var items = [
     { id: 'hoy', icono: '📋', titulo: 'Mis órdenes' },
     { id: 'orden', icono: '🧭', titulo: 'Orden' },
-    { id: 'plata', icono: '💵', titulo: 'Mi plata' },
+    { id: 'plata', icono: '💵', titulo: 'Mis fondos' },
     { id: 'gastos', icono: '🧾', titulo: 'Gastos' }
   ];
   menu.innerHTML = items.map(function (i) {
@@ -86,7 +87,7 @@ function dibujarPantallaTecnico(volverAlTope) {
 function tituloPantalla() {
   if (pantallaTecnico === 'hoy') { return 'Mis órdenes'; }
   if (pantallaTecnico === 'orden') { return 'Orden de trabajo'; }
-  if (pantallaTecnico === 'plata') { return 'Mi plata'; }
+  if (pantallaTecnico === 'plata') { return 'Mis fondos'; }
   return 'Gastos';
 }
 
@@ -98,7 +99,13 @@ function pantallaHoy() {
     return '<div class="vacio">No tienes órdenes asignadas. El coordinador te asigna desde la pestaña Asignación.</div>';
   }
 
-  return ordenes.map(function (o) {
+  var abiertas = ordenes.filter(function (o) { return !o.Hora_Fin; });
+  var siguiente = abiertas.filter(function (o) { return !!o.Hora_Inicio; })[0] || abiertas[0];
+  var intro = '<section class="tecnico-resumen"><span class="sobretitulo">TU AGENDA DE TERRENO</span><h2>' + (abiertas.length ? 'Vamos con la siguiente orden' : 'Todo al día') + '</h2><p>' + abiertas.length + ' pendientes · ' + (ordenes.length - abiertas.length) + ' cerradas</p>';
+  if (siguiente) { intro += '<button class="boton" data-accion="abrir-orden" data-orden="' + esc(siguiente.ID_Orden) + '">' + (siguiente.Hora_Inicio ? 'Continuar trabajo' : 'Preparar orden') + ' →</button>'; }
+  intro += '</section><div class="filtros-ordenes" aria-label="Filtrar órdenes">' + [['pendientes', 'Pendientes'], ['cerradas', 'Cerradas'], ['todas', 'Todas']].map(function (f) { return '<button class="boton secundario chico" data-filtro="' + f[0] + '" aria-pressed="' + (filtroOrdenes === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div>';
+  var visibles = ordenes.filter(function (o) { return filtroOrdenes === 'todas' || (filtroOrdenes === 'cerradas' ? !!o.Hora_Fin : !o.Hora_Fin); });
+  return intro + (visibles.length ? '' : '<div class="vacio">No hay órdenes en esta categoría.</div>') + visibles.map(function (o) {
     var j = plan.jornadasPorId[o.ID_Jornada];
     var marcados = o.Checklist.filter(function (c) { return c.Marcado; }).length;
     var listo = marcados === o.Checklist.length;
@@ -120,7 +127,7 @@ function pantallaHoy() {
 
 function pantallaOrden() {
   var ordenes = ordenesDelTecnico();
-  var orden = ordenActiva ? buscarOrden(ordenActiva) : ordenes[0];
+  var orden = ordenActiva ? ordenes.filter(function (o) { return o.ID_Orden === ordenActiva; })[0] : ordenes.filter(function (o) { return o.Hora_Inicio && !o.Hora_Fin; })[0] || ordenes.filter(function (o) { return !o.Hora_Fin; })[0] || ordenes[0];
   if (!orden) {
     return '<div class="vacio">Elige una orden en Mis órdenes.</div>';
   }
@@ -130,7 +137,10 @@ function pantallaOrden() {
   var completo = checklistCompleto(orden);
   var marcados = orden.Checklist.filter(function (c) { return c.Marcado; }).length;
 
-  var html = '';
+  var paso = orden.Hora_Fin ? 3 : orden.Hora_Inicio ? 2 : completo ? 1 : 0;
+  var html = '<div class="pasos-orden" aria-label="Progreso de la orden">' + ['Preparación', 'Ruta', 'Trabajo', 'Cierre'].map(function (nombre, i) { return '<span class="' + (i <= paso ? 'hecho' : '') + '">' + (i + 1) + '. ' + nombre + '</span>'; }).join('') + '</div>';
+  var bloqueoSecuencia = !orden.Hora_Inicio ? motivoInicio(estado, orden) : '';
+  if (bloqueoSecuencia) { html += '<div class="aviso-regla" role="status"><strong>Etapa pendiente</strong><p>' + esc(bloqueoSecuencia) + '</p></div>'; }
 
   if (!completo) {
     html += '<div class="bloqueado-velo">'
@@ -189,29 +199,31 @@ function pantallaOrden() {
     html += '<a class="boton" href="' + esc(maps) + '" target="_blank" rel="noopener">Abrir ruta en Google Maps</a>';
   }
   if (principal) {
-    var telefono = '+56 2 2345 6789';
-    html += '<a class="boton secundario" href="tel:' + esc(telefono.replace(/ /g, '')) + '">Llamar al cliente</a>';
+    var telefono = principal.Telefono || '';
+    if (telefono) { html += '<a class="boton secundario" href="tel:' + esc(telefono.replace(/ /g, '')) + '">Llamar al cliente</a>'; }
   }
   html += '</div>';
 
   html += '<div class="tel-tarjeta" style="margin-top:.6rem"><h3>Hitos</h3>'
     + '<div class="plata-fila"><span>Inicio</span><span class="monto">' + esc(horaCorta(orden.Hora_Inicio)) + '</span></div>'
     + '<div class="plata-fila"><span>Termino</span><span class="monto">' + esc(horaCorta(orden.Hora_Fin)) + '</span></div>'
-    + (orden.Coord_Inicio ? '<span class="meta">Ubicación registrada: ' + esc(orden.Coord_Inicio.lugar) + ' (simulada)</span>' : '')
+    + (orden.Coord_Inicio ? '<span class="meta">Lugar planificado: ' + esc(orden.Coord_Inicio.lugar) + '</span>' : '')
     + '</div>';
 
   if (!orden.Hora_Inicio) {
-    html += '<div class="acciones-tel"><button class="boton" data-accion="iniciar">Iniciar trabajo</button></div>';
+    var bloqueo = motivoInicio(estado, orden);
+    html += '<div class="acciones-tel"><button class="boton" data-accion="iniciar"' + (bloqueo ? ' disabled' : '') + '>Iniciar trabajo</button></div>';
   } else if (!orden.Hora_Fin) {
     html += '<div class="tel-tarjeta"><h3>Cerrar la orden</h3>'
       + '<label class="campo"><span>Equipos instalados</span>'
+      + '<p class="nota">Informa el total instalado por la cuadrilla. Se cuenta una sola vez y debe coincidir con el cierre de tus compa\u00f1eros.</p>'
       + '<input type="number" id="equipos-instalados" min="0" max="' + (j ? j.Equipos : 0) + '" value="' + (j ? j.Equipos : 0) + '"></label>'
       + '<label class="campo"><span>Observaciones</span><textarea id="observaciones" style="min-height:4em"></textarea></label>'
       + '<span class="meta">Firma del cliente</span>'
       + '<canvas class="firma-lienzo" id="firma" width="330" height="130"></canvas>'
       + '<button class="boton secundario chico" data-accion="limpiar-firma" style="margin-top:.35rem">Borrar firma</button>'
       + '<label class="campo" style="margin-top:.6rem"><span>Foto de la instalación terminada</span>'
-      + '<input type="file" accept="image/*" id="foto-instalacion"></label>'
+      + '<input type="file" accept="image/jpeg,image/png,image/webp" id="foto-instalacion"></label>'
       + '</div>'
       + '<div class="acciones-tel"><button class="boton" data-accion="finalizar">Finalizar trabajo</button></div>';
   } else {
@@ -243,7 +255,7 @@ function listaChecklist(orden) {
     html += '<div class="grupo-check">' + esc(titulos[categoria]) + '</div>';
     porCategoria[categoria].forEach(function (x) {
       html += '<label class="item-check' + (x.marcado ? ' marcado' : '') + '">'
-        + '<input type="checkbox" data-implemento="' + esc(x.im.ID_Implemento) + '"' + (x.marcado ? ' checked' : '') + '>'
+        + '<input type="checkbox" data-implemento="' + esc(x.im.ID_Implemento) + '"' + (x.marcado ? ' checked' : '') + (orden.Hora_Inicio ? ' disabled' : '') + '>'
         + '<span class="texto">' + esc(x.im.Item) + '</span></label>';
     });
   });
@@ -251,7 +263,7 @@ function listaChecklist(orden) {
   return html;
 }
 
-/* ---------- Mi plata ---------- */
+/* ---------- Mis fondos ---------- */
 
 function pantallaPlata() {
   var n = plan.nomina.filter(function (x) { return x.ID_Tecnico === sesion.idTecnico; })[0];
@@ -263,16 +275,17 @@ function pantallaPlata() {
     .reduce(function (a, g) { return a + g.Monto; }, 0);
   var pendiente = mios.filter(function (g) { return g.Estado === 'Pendiente'; })
     .reduce(function (a, g) { return a + g.Monto; }, 0);
-  var disponible = (pagado ? n.Total : 0) - aprobado - pendiente;
+  var disponible = n.Transferido + (n.Reembolsado || 0) - aprobado - pendiente;
 
   return '<div class="tel-tarjeta">'
-    + '<h3>' + (pagado ? 'Transferido' : 'Por transferir') + '</h3>'
-    + '<div style="font-size:2rem;font-weight:700;font-variant-numeric:tabular-nums">' + esc(clp(n.Total)) + '</div>'
+    + '<h3>' + 'Anticipo recibido' + '</h3>'
+    + '<div style="font-size:2rem;font-weight:700;font-variant-numeric:tabular-nums">' + esc(clp(n.Transferido)) + '</div>'
+    + '<div class="meta">Pendiente de transferencia: ' + esc(clp(n.Por_Transferir)) + '</div>'
     + '<span class="meta">' + n.Jornadas + ' jornada(s) asignada(s)</span>'
     + (pagado ? '' : '<div style="margin-top:.4rem"><span class="marca peaje">Esperando la transferencia del supervisor</span></div>')
     + '</div>'
 
-    + '<div class="tel-tarjeta"><h3>De donde sale</h3>'
+    + '<div class="tel-tarjeta"><h3>Detalle del anticipo</h3>'
     + '<div class="plata-fila"><span>Viáticos</span><span class="monto">' + esc(clp(n.Viatico)) + '</span></div>'
     + '<div class="plata-fila"><span>Colaciones</span><span class="monto">' + esc(clp(n.Colacion)) + '</span></div>'
     + '<div class="plata-fila"><span>Hotel</span><span class="monto">' + esc(clp(n.Hotel)) + '</span></div>'
@@ -283,10 +296,13 @@ function pantallaPlata() {
     + (n.Combustible === 0 && n.Peaje === 0 ? '<span class="meta">No conduces en ninguna jornada, por eso no recibes combustible ni peajes.</span>' : '')
     + '</div>'
 
-    + '<div class="tel-tarjeta"><h3>Como vas</h3>'
+    + '<div class="tel-tarjeta"><h3>Saldo de rendición</h3>'
     + '<div class="plata-fila"><span>Rendido y aprobado</span><span class="monto">' + esc(clp(aprobado)) + '</span></div>'
     + '<div class="plata-fila"><span>Rendido por revisar</span><span class="monto">' + esc(clp(pendiente)) + '</span></div>'
-    + '<div class="plata-fila total"><span>Te queda</span><span class="monto">' + esc(clp(Math.max(0, disponible))) + '</span></div>'
+    + '<div class="plata-fila"><span>Reembolsos recibidos</span><span class="monto">' + esc(clp(n.Reembolsado)) + '</span></div>'
+    + '<div class="plata-fila"><span>Reembolso aprobado pendiente</span><span class="monto">' + esc(clp(n.Por_Reembolsar)) + '</span></div>'
+    + '<div class="plata-fila total"><span>Saldo disponible</span><span class="monto">' + esc(clp(disponible)) + '</span></div>'
+    + (disponible < 0 ? '<p class="nota">Tus rendiciones superan el anticipo recibido. Solicita la revisión del supervisor.</p>' : '')
     + '</div>'
 
     + '<div class="tel-tarjeta" style="border-left:4px solid var(--peaje)">'
@@ -318,8 +334,8 @@ function pantallaGastos() {
     + '<label class="campo"><span>Monto</span><input type="number" id="gasto-monto" min="0" step="100" value="5000"></label>'
     + '<label class="item-check"><input type="checkbox" id="gasto-emergencia">'
     + '<span class="texto">Es una emergencia: se paga con la reserva</span></label>'
-    + '<label class="campo" style="margin-top:.5rem"><span>Foto de la boleta</span>'
-    + '<input type="file" accept="image/*" id="gasto-foto"></label>'
+    + '<label class="campo" style="margin-top:.5rem"><span>Foto de la boleta · máximo 2 MB</span>'
+    + '<input type="file" accept="image/jpeg,image/png,image/webp" id="gasto-foto"></label>'
     + '<div class="acciones-tel"><button class="boton" data-accion="subir-gasto">Subir comprobante</button></div>'
     + '</div>';
 
@@ -381,7 +397,8 @@ function prepararFirma() {
 
   firmaLienzo.addEventListener('mousedown', empezar);
   firmaLienzo.addEventListener('mousemove', mover);
-  window.addEventListener('mouseup', terminar);
+  firmaLienzo.addEventListener('mouseleave', terminar);
+  firmaLienzo.addEventListener('mouseup', terminar);
   firmaLienzo.addEventListener('touchstart', empezar);
   firmaLienzo.addEventListener('touchmove', mover);
   firmaLienzo.addEventListener('touchend', terminar);
@@ -390,6 +407,8 @@ function prepararFirma() {
 /* ---------- Eventos ---------- */
 
 function manejarAccionTecnico(evento) {
+  var filtro = evento.target.closest('[data-filtro]');
+  if (filtro) { filtroOrdenes = filtro.getAttribute('data-filtro'); dibujarPantallaTecnico(true); return; }
   var pantalla = evento.target.closest('[data-pantalla]');
   if (pantalla) {
     pantallaTecnico = pantalla.getAttribute('data-pantalla');
@@ -437,19 +456,20 @@ function manejarCambioTecnico(evento) {
   }
 }
 
-function ubicacionSimulada(jornada) {
+function ubicacionPlanificada(jornada) {
   if (!jornada) { return null; }
   var id = jornada.Sesiones[0] || jornada.Comunas[0];
   var d = plan.destinosPorId[id];
-  if (!d) { return { lugar: 'Base de operaciones', lat: BASE_OPERACIONES.Lat, lng: BASE_OPERACIONES.Lng, en_sitio: true }; }
-  return { lugar: d.Comuna, lat: d.Lat, lng: d.Lng, en_sitio: true };
+  if (!d) { return { lugar: 'Base de operaciones', lat: BASE_OPERACIONES.Lat, lng: BASE_OPERACIONES.Lng, en_sitio: null, fuente: 'Plan' }; }
+  return { lugar: d.Comuna, lat: d.Lat, lng: d.Lng, en_sitio: null, fuente: 'Plan' };
 }
 
 function iniciarTrabajo() {
   var orden = buscarOrden(ordenActiva);
   if (!orden) { return; }
   var j = plan.jornadasPorId[orden.ID_Jornada];
-  despachar('iniciarTrabajo', { idOrden: ordenActiva, coordenadas: ubicacionSimulada(j) });
+  var resultado = despachar('iniciarTrabajo', { idOrden: ordenActiva, coordenadas: ubicacionPlanificada(j) });
+  if (!resultado) { return; }
   alertaSuave('Trabajo iniciado. La hora quedo registrada y el supervisor ya la ve.', 'ruta');
 }
 
@@ -461,28 +481,32 @@ function finalizarTrabajo() {
   var observaciones = (el('#observaciones') || {}).value || '';
   var firma = (firmaLienzo && !firmaVacia) ? firmaLienzo.toDataURL('image/png') : null;
 
+  if (!Number.isInteger(equipos) || equipos < 0 || equipos > j.Equipos) { alertaSuave('Indica una cantidad válida de equipos para esta jornada.', 'alerta'); return; }
+  if (j.Equipos > 0 && (!firma || !(el('#foto-instalacion').files || []).length)) { alertaSuave('Agrega la firma y una foto antes de cerrar la instalación.', 'alerta'); return; }
   leerArchivo(el('#foto-instalacion'), function (foto) {
-    despachar('finalizarTrabajo', {
+    var resultado = despachar('finalizarTrabajo', {
       idOrden: orden.ID_Orden,
-      coordenadas: ubicacionSimulada(j),
+      coordenadas: ubicacionPlanificada(j),
       equipos: equipos,
       observaciones: observaciones,
       firma: firma,
       foto: foto
     });
+    if (!resultado) { return; }
     alertaSuave('Orden cerrada con ' + equipos + ' equipo(s). El avance del supervisor ya se movio.', 'ruta');
   });
 }
 
 function subirGasto() {
   var monto = Number((el('#gasto-monto') || {}).value || 0);
-  if (monto <= 0) { alertaSuave('El monto tiene que ser mayor que cero.', 'alerta'); return; }
+  if (!Number.isSafeInteger(monto) || monto <= 0) { alertaSuave('El monto tiene que ser mayor que cero.', 'alerta'); return; }
   var idOrden = (el('#gasto-orden') || {}).value;
   var tipo = (el('#gasto-tipo') || {}).value;
   var emergencia = (el('#gasto-emergencia') || {}).checked;
 
+  if (!idOrden || !(el('#gasto-foto').files || []).length) { alertaSuave('Selecciona una orden y adjunta la foto de la boleta.', 'alerta'); return; }
   leerArchivo(el('#gasto-foto'), function (comprobante) {
-    despachar('agregarGasto', {
+    var resultado = despachar('agregarGasto', {
       idOrden: idOrden,
       idTecnico: sesion.idTecnico,
       tipo: tipo,
@@ -490,6 +514,7 @@ function subirGasto() {
       emergencia: emergencia,
       comprobante: comprobante
     });
+    if (!resultado) { return; }
     alertaSuave('Comprobante enviado. Queda pendiente hasta que el supervisor lo revise.', 'ruta');
   });
 }
@@ -497,8 +522,10 @@ function subirGasto() {
 /* Lee la foto elegida como data-URL. Si no hay archivo, sigue igual sin imagen. */
 function leerArchivo(campo, alTerminar) {
   if (!campo || !campo.files || !campo.files[0]) { alTerminar(null); return; }
+  var archivo = campo.files[0];
+  if (!/^image\/(jpeg|png|webp)$/.test(archivo.type) || archivo.size > 2 * 1024 * 1024) { alertaSuave('Usa una imagen JPG, PNG o WebP de hasta 2 MB.', 'alerta'); return; }
   var lector = new FileReader();
   lector.onload = function () { alTerminar(lector.result); };
-  lector.onerror = function () { alTerminar(null); };
+  lector.onerror = function () { alertaSuave('No se pudo leer la imagen. Inténtalo nuevamente.', 'alerta'); };
   lector.readAsDataURL(campo.files[0]);
 }

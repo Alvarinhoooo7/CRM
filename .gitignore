@@ -8,3 +8,4 @@ v2/tests/*.local.json
 .obsidian/
 demo/js/clave.local.js
 .playwright-mcp/
+.tmp-ui/

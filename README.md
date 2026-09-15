@@ -386,6 +386,7 @@ sobre el tope se alerta, no se descarta sola.
 
 ```bash
 node demo/pruebas.cjs
+node demo/pruebas-ui.cjs
 ```
 
 38 comprobaciones de **reglas y cuadraturas**, no de montos fijos: que la suma de las
@@ -395,6 +396,14 @@ enviar el link reduzca la capacitación exactamente a la mitad, y que el enlace 
 con coordenadas y waypoints.
 
 Los montos concretos cambian si se editan los tramos o los parámetros, y eso es correcto.
+
+Además hay 40 escenarios de regresión para calendario, secuencia de viaje, recursos,
+formularios, ejecución, pagos y catálogos. Las reglas y límites se detallan en
+[Validaciones operativas](docs/VALIDACIONES_OPERATIVAS.md).
+
+El supervisor carga una vez 14 rendiciones sintéticas y anticipos de ejemplo. La interfaz
+incluye las 16 regiones y 346 comunas, con Ñuble separado. Restablecer el plan repone ese
+escenario inicial. Los datos guardados por el usuario no se reemplazan al abrir la página.
 
 ## Datos
 

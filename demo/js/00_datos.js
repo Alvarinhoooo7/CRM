@@ -153,17 +153,6 @@ var JORNADAS_SEMILLA = [
 
 var FECHA_INICIO_PLAN = '2026-09-21';
 
-/* Regiones y comunas para los desplegables del formulario del coordinador.
-   Cubre las regiones del caso mas las comunas de cada una que el servicio atiende. */
-var REGIONES = {
-  'Atacama': ['Copiapó', 'Caldera', 'Vallenar', 'Chañaral'],
-  'Coquimbo': ['Coquimbo', 'La Serena', 'Ovalle', 'Illapel'],
-  'Valparaíso': ['La Calera', 'San Antonio', 'Valparaíso', 'Viña del Mar', 'Quillota', 'Los Andes'],
-  'Metropolitana': ['Santiago', 'Maipú', 'Pudahuel', 'Puente Alto', 'Lo Barnechea', 'Melipilla', 'Macul', 'La Florida', 'Renca', 'Quilicura'],
-  'Maule': ['Curicó', 'Talca', 'Linares', 'Constitución'],
-  'Biobío': ['Concepción', 'San Pedro de la Paz', 'Penco', 'Tomé', 'Santa Juana', 'Coronel', 'Talcahuano']
-};
-
 /* Construye el estado inicial completo a partir de la semilla. */
 function construirSemilla() {
   var parametros = derivarParametros(PARAMETROS_BASE);
@@ -183,7 +172,7 @@ function construirSemilla() {
       Lat: d[9],
       Lng: d[10],
       Empresa: 'Telecomunicaciones del Pacífico',
-      Contacto: 'Contacto de demostración',
+      Contacto: 'Encargado de instalaciones',
       Mail_Cliente: '',
       Link_Enviado: false
     };
@@ -300,7 +289,7 @@ if (typeof module !== 'undefined' && module.exports) {
     PARAMETROS_BASE: PARAMETROS_BASE,
     PARAMETROS_EDITABLES: PARAMETROS_EDITABLES,
     BASE_OPERACIONES: BASE_OPERACIONES,
-    REGIONES: REGIONES,
+    REGIONES: typeof REGIONES !== 'undefined' ? REGIONES : {},
     derivarParametros: derivarParametros,
     construirSemilla: construirSemilla,
     fechaLaboral: fechaLaboral,

@@ -19,7 +19,7 @@ function dibujarSupervisor(contenedor) {
     + '<span class="quien">Supervisión · ' + esc(sesion.correo) + '</span>'
     + '<span class="empuje"></span>'
     + '<button class="boton" data-accion="imprimir">Imprimir informe</button>'
-    + '<button class="boton" data-accion="reiniciar">Reiniciar demo</button>'
+    + '<button class="boton" data-accion="reiniciar">Restablecer plan</button>'
     + '<button class="boton" data-accion="salir">Salir</button>'
     + '</div>'
     + '<div class="pestanas" role="tablist">'
@@ -30,7 +30,7 @@ function dibujarSupervisor(contenedor) {
     + '</div>'
     + '<div class="contenido" id="contenido-supervisor"></div>';
 
-  contenedor.addEventListener('click', function (evento) {
+  contenedor.onclick = function (evento) {
     var boton = evento.target.closest('[data-pestana]');
     if (boton) {
       pestanaSupervisor = boton.getAttribute('data-pestana');
@@ -38,9 +38,9 @@ function dibujarSupervisor(contenedor) {
       return;
     }
     manejarAccionSupervisor(evento);
-  });
+  };
 
-  contenedor.addEventListener('change', manejarCambioSupervisor);
+  contenedor.onchange = manejarCambioSupervisor;
   dibujarPestanaSupervisor();
 }
 
@@ -56,6 +56,7 @@ function dibujarPestanaSupervisor() {
   else if (pestanaSupervisor === 'nomina') { caja.innerHTML = vistaNomina(); }
   else if (pestanaSupervisor === 'gastos') { caja.innerHTML = vistaGastos(); }
   else if (pestanaSupervisor === 'parametros') { caja.innerHTML = vistaParametros(); }
+  caja.insertAdjacentHTML('afterbegin', panelAnalitico(pestanaSupervisor));
   window.scrollTo(0, desplazamiento);
 }
 
@@ -67,9 +68,9 @@ function vistaResumen() {
 
   var html = '<div class="indicadores">'
     + indicador(clp(r.Costo_Total), 'Costo presupuestado del plan', 'acento')
-    + indicador(clp(r.Nomina), 'A transferir a los técnicos')
+    + indicador(clp(r.Por_Transferir), 'Anticipos por transferir')
     + indicador(clp(r.Transferido), 'Transferido')
-    + indicador(clp(r.Rendido), 'Rendido con comprobante')
+    + indicador(clp(r.Rendido), 'Rendiciones aprobadas')
     + indicador(clp(r.Brecha), 'Brecha por rendir', r.Brecha > 0 ? 'aviso' : '')
     + indicador(r.Equipos_Instalados + ' / ' + r.Equipos_Previstos, 'Equipos instalados')
     + indicador(porcentaje(r.Avance), 'Avance del plan')
@@ -180,7 +181,7 @@ function vistaDesempeno() {
   estado.tecnicos.forEach(function (t) {
     porTecnico[t.ID_Tecnico] = {
       ordenes: 0, cerradas: 0, checklist: 0, equipos: 0,
-      horasReales: 0, enSitio: 0, conSello: 0
+      horasReales: 0, horasComparables: 0, enSitio: 0, conSello: 0
     };
   });
 
@@ -192,9 +193,10 @@ function vistaDesempeno() {
     if (checklistCompleto(o)) { d.checklist++; }
     d.equipos += o.Equipos_Instalados || 0;
     if (o.Hora_Inicio && o.Hora_Fin) {
+      d.horasComparables += Number.isFinite(o.Horas_Plan_Inicio) ? o.Horas_Plan_Inicio : (plan.jornadasPorId[o.ID_Jornada] || {}).Horas_Totales || 0;
       d.horasReales += (new Date(o.Hora_Fin) - new Date(o.Hora_Inicio)) / 3600000;
     }
-    if (o.Coord_Inicio) {
+    if (o.Coord_Inicio && typeof o.Coord_Inicio.en_sitio === 'boolean') {
       d.conSello++;
       if (o.Coord_Inicio.en_sitio) { d.enSitio++; }
     }
@@ -202,16 +204,16 @@ function vistaDesempeno() {
 
   var html = '<div class="panel"><h2>Desempeño por técnico</h2>'
     + '<p class="nota">Las horas reales salen de los hitos que el propio técnico marca en el teléfono. '
-    + 'Una hora capturada por teléfono no es certificacion del servidor: es lo que declaro el técnico.</p>'
+    + 'Las horas son declaradas por el técnico. La desviación compara solo órdenes cerradas contra las horas planificadas de esas mismas órdenes.</p>'
     + '<div class="tabla-envoltorio"><table class="datos">'
     + '<thead><tr><th>Técnico</th><th>Licencia</th><th class="num">Jornadas</th>'
-    + '<th class="num">Horas plan</th><th class="num">Horas reales</th><th class="num">Desviacion</th>'
+    + '<th class="num">Horas plan</th><th class="num">Horas reales</th><th class="num">Desviación al cierre</th>'
     + '<th class="num">Checklist</th><th class="num">Cerradas</th><th class="num">Equipos</th>'
     + '<th class="num">En sitio</th></tr></thead><tbody>';
 
   plan.nomina.forEach(function (n) {
     var d = porTecnico[n.ID_Tecnico];
-    var desviacion = d.horasReales > 0 ? d.horasReales - n.Horas : 0;
+    var desviacion = d.horasReales > 0 ? d.horasReales - d.horasComparables : 0;
     html += '<tr>'
       + '<td>' + esc(n.Nombre) + ' <span class="marca">' + esc(n.ID_Tecnico) + '</span></td>'
       + '<td>' + (n.Licencia ? '<span class="marca ruta">Clase B</span>' : '<span class="marca">Sin licencia</span>') + '</td>'
@@ -252,7 +254,7 @@ function vistaNomina() {
     + '<div class="tabla-envoltorio"><table class="datos">'
     + '<thead><tr><th>Técnico</th><th class="num">Viático</th><th class="num">Colación</th>'
     + '<th class="num">Hotel</th><th class="num">Combustible</th><th class="num">Peaje</th>'
-    + '<th class="num">Base</th><th class="num">Reserva</th><th class="num">A transferir</th>'
+    + '<th class="num">Base</th><th class="num">Reserva</th><th class="num">Anticipo previsto</th>'
     + '<th class="num">Rendido</th><th>Estado</th></tr></thead><tbody>';
 
   plan.nomina.forEach(function (n) {
@@ -268,9 +270,10 @@ function vistaNomina() {
       + '<td class="num">' + esc(clp(n.Reserva)) + '</td>'
       + '<td class="num"><strong>' + esc(clp(n.Total)) + '</strong></td>'
       + '<td class="num">' + esc(clp(n.Rendido)) + '</td>'
-      + '<td><button class="boton chico ' + (pagado ? '' : 'secundario') + ' no-imprimir" '
-      + 'data-accion="pago" data-tecnico="' + esc(n.ID_Tecnico) + '">'
-      + (pagado ? 'Transferido' : 'Marcar pagado') + '</button></td>'
+      + '<td><div class="nota">Recibido: ' + esc(clp(n.Transferido)) + '</div><button class="boton chico ' + (pagado ? '' : 'secundario') + ' no-imprimir" '
+      + 'data-accion="pago" data-tecnico="' + esc(n.ID_Tecnico) + '"' + (n.Por_Transferir > 0 ? '' : ' disabled') + '>'
+      + (n.Por_Transferir > 0 ? 'Transferir ' + esc(clp(n.Por_Transferir)) : 'Anticipo cubierto') + '</button>'
+      + (n.Exceso_Anticipo ? '<div class="nota">Exceso de anticipo: ' + esc(clp(n.Exceso_Anticipo)) + '</div>' : '') + '</td>'
       + '</tr>';
   });
 
@@ -327,10 +330,10 @@ function vistaGastos() {
         ? '<img class="miniatura" src="' + esc(g.Comprobante) + '" alt="Comprobante de ' + esc(g.Tipo) + '">'
         : '<span class="nota">Sin foto</span>') + '</td>'
       + '<td><span class="marca ' + marca + '">' + esc(g.Estado) + '</span></td>'
-      + '<td class="no-imprimir">'
+      + '<td class="no-imprimir">' + (g.Estado === 'Pendiente' ? '' : '<span class="nota">Revisión finalizada</span><span class="oculto">')
       + '<button class="boton chico" data-accion="gasto" data-gasto="' + esc(g.ID_Gasto) + '" data-estado="Aprobado">Aprobar</button> '
       + '<button class="boton chico peligro" data-accion="gasto" data-gasto="' + esc(g.ID_Gasto) + '" data-estado="Rechazado">Rechazar</button>'
-      + '</td></tr>';
+      + (g.Estado === 'Pendiente' ? '' : '</span>') + '</td></tr>';
   });
 
   html += '</tbody></table></div></div>';
@@ -439,6 +442,7 @@ function manejarAccionSupervisor(evento) {
   else if (accion === 'salir') { cerrarSesion(); }
   else if (accion === 'pago') { despachar('marcarPago', { idTecnico: boton.getAttribute('data-tecnico') }); }
   else if (accion === 'pagar-todo') { despachar('pagarTodo', {}); }
+  else if (accion === 'reembolso') { despachar('pagarReembolso', { idTecnico: boton.getAttribute('data-tecnico') }); }
   else if (accion === 'gasto') {
     despachar('revisarGasto', {
       idGasto: boton.getAttribute('data-gasto'),
@@ -453,6 +457,6 @@ function manejarCambioSupervisor(evento) {
   var campo = evento.target.closest('[data-parametro]');
   if (!campo) { return; }
   var valor = Number(campo.value);
-  if (!isFinite(valor) || valor < 0) { return; }
-  despachar('parametro', { codigo: campo.getAttribute('data-parametro'), valor: valor });
+  var codigo = campo.getAttribute('data-parametro');
+  if (!despachar('parametro', { codigo: codigo, valor: campo.value.trim() ? valor : NaN })) { campo.value = estado.parametros[codigo]; }
 }

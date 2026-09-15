@@ -10,19 +10,10 @@ var PESTANAS_COORDINADOR = [
   { id: 'capacitacion', titulo: 'Capacitación' }
 ];
 
-/* Referencia por region para comunas que todavia no estan en la tabla de destinos.
-   El coordinador siempre puede corregir los kilometros en el formulario. */
-var REFERENCIA_REGION = {
-  'Atacama': { km: 812.2, peaje: 28582, corredor: 'R5N', lat: -27.3665, lng: -70.3323 },
-  'Coquimbo': { km: 469.8, peaje: 15132, corredor: 'R5N', lat: -29.9533, lng: -71.3436 },
-  'Valparaíso': { km: 121.7, peaje: 5082, corredor: 'R5N', lat: -32.7876, lng: -71.1929 },
-  'Metropolitana': { km: 20, peaje: 1200, corredor: 'URB', lat: -33.4372, lng: -70.6506 },
-  'Maule': { km: 194.7, peaje: 5249, corredor: 'R5S', lat: -34.9828, lng: -71.2394 },
-  'Biobío': { km: 508.1, peaje: 16421, corredor: 'R5S', lat: -36.8420, lng: -73.1050 }
-};
-
 var pestanaCoordinador = 'ordenes';
 var propuestaActual = null;
+var borradorTrabajo = null;
+var destinoCorreoSeleccionado = null;
 var seleccionAsignacion = { jornada: null, tecnicos: [], conductor: null, vehiculo: null };
 var arrastrando = null;
 
@@ -32,7 +23,7 @@ function dibujarCoordinador(contenedor) {
     + '<h1>Servicio técnico en ruta</h1>'
     + '<span class="quien">Coordinación · ' + esc(sesion.correo) + '</span>'
     + '<span class="empuje"></span>'
-    + '<button class="boton" data-accion="reiniciar">Reiniciar demo</button>'
+    + '<button class="boton" data-accion="reiniciar">Restablecer plan</button>'
     + '<button class="boton" data-accion="salir">Salir</button>'
     + '</div>'
     + '<div class="pestanas" role="tablist">'
@@ -43,7 +34,7 @@ function dibujarCoordinador(contenedor) {
     + '</div>'
     + '<div class="contenido" id="contenido-coordinador"></div>';
 
-  contenedor.addEventListener('click', function (evento) {
+  contenedor.onclick = function (evento) {
     var boton = evento.target.closest('[data-pestana]');
     if (boton) {
       pestanaCoordinador = boton.getAttribute('data-pestana');
@@ -52,9 +43,9 @@ function dibujarCoordinador(contenedor) {
       return;
     }
     manejarAccionCoordinador(evento);
-  });
-  contenedor.addEventListener('change', manejarCambioCoordinador);
-  contenedor.addEventListener('input', manejarEntradaCoordinador);
+  };
+  contenedor.onchange = manejarCambioCoordinador;
+  contenedor.oninput = manejarEntradaCoordinador;
 
   dibujarPestanaCoordinador();
 }
@@ -66,7 +57,7 @@ function dibujarPestanaCoordinador() {
   var caja = el('#contenido-coordinador');
   if (!caja) { return; }
   if (pestanaCoordinador === 'ordenes') { caja.innerHTML = vistaOrdenes(); }
-  else if (pestanaCoordinador === 'nueva') { caja.innerHTML = vistaNuevaOrden(); rellenarKmComuna(); }
+  else if (pestanaCoordinador === 'nueva') { caja.innerHTML = vistaNuevaOrden(); restaurarBorradorTrabajo(); }
   else if (pestanaCoordinador === 'asignacion') { caja.innerHTML = vistaAsignacion(); }
   else if (pestanaCoordinador === 'calendario') { caja.innerHTML = vistaCalendario(); activarArrastre(); }
   else if (pestanaCoordinador === 'flota') { caja.innerHTML = vistaFlota(); }
@@ -127,7 +118,7 @@ function vistaOrdenes() {
 
 function vistaNuevaOrden() {
   var regiones = Object.keys(REGIONES);
-  var primeraRegion = (propuestaActual && propuestaActual.entrada.region) || 'Metropolitana';
+  var primeraRegion = (propuestaActual && propuestaActual.entrada.region) || (borradorTrabajo && borradorTrabajo.region) || 'Metropolitana de Santiago';
 
   var html = '<div class="columnas">';
 
@@ -156,7 +147,7 @@ function vistaNuevaOrden() {
     + '<button type="button" class="boton secundario" data-accion="autoasignar">Autoasignar equipo</button>'
     + '</form></div>';
 
-  html += '<div class="panel"><h2>Simulación</h2>' + (propuestaActual ? cuerpoPropuesta() : '<div class="vacio">Completa los datos y aprieta Simular. '
+  html += '<div class="panel" id="panel-propuesta"><h2>Simulación</h2>' + (propuestaActual ? cuerpoPropuesta() : '<div class="vacio">Completa los datos y aprieta Simular. '
     + 'Hasta entonces no se crea ninguna orden.</div>') + '</div>';
 
   html += '</div>';
@@ -180,40 +171,19 @@ function vistaNuevaOrden() {
 
 function cuerpoPropuesta() {
   var p = propuestaActual;
-  var j = p.jornadaCalculada;
-  var n = j.Tecnicos.length;
-
-  var html = '<table class="datos"><tbody>'
-    + fila('Recorrido', recorridoTexto(j))
-    + fila('Equipo', j.Tecnicos.map(nombreTecnico).join(', '))
-    + fila('Conduce', nombreTecnico(j.Conductor))
-    + fila('Camioneta', j.ID_Vehiculo)
-    + fila('Kilómetros ida y vuelta', Math.round(j.Km).toLocaleString('es-CL') + ' km')
-    + fila('Horas de viaje', formatoHoras(j.Horas_Viaje))
-    + fila('Horas de instalación', formatoHoras(j.Horas_Instalacion))
-    + fila('Horas de capacitación', formatoHoras(j.Horas_Capacitacion))
-    + fila('Horas totales de la jornada', formatoHoras(j.Horas_Totales))
-    + fila('Noches de hotel', j.Noches ? j.Noches + ' por técnico' : 'Retorno en el día')
-    + fila('Combustible', clp(j.Combustible))
-    + fila('Peajes', clp(j.Peaje))
-    + fila(j.Estipendio_Tipo, clp(j.Estipendio * n))
-    + fila('Hotel', clp(j.Hotel * n))
-    + '</tbody><tfoot><tr><td>Costo de la jornada</td><td class="num">' + esc(clp(p.costo)) + '</td></tr></tfoot></table>';
-
-  if (j.Alertas.length) {
-    html += '<h3 style="margin-top:1rem">Advertencias</h3>' + listaAlertas(j.Alertas.map(function (a) {
-      return { nivel: a.nivel, origen: 'Simulacion', texto: a.texto };
-    }));
-  }
-
-  var bloqueante = j.Alertas.filter(function (a) { return a.nivel === 'alto'; }).length > 0;
-  html += '<div style="margin-top:1rem">'
-    + '<button class="boton" data-accion="confirmar"' + (bloqueante ? ' disabled' : '') + '>Confirmar y crear órdenes</button> '
-    + '<button class="boton secundario" data-accion="descartar">Descartar</button>'
-    + (bloqueante ? '<p class="nota" style="margin-top:.6rem;color:var(--alerta)">Hay advertencias criticas. '
-      + 'Corrige la fecha, el equipo o la camioneta antes de confirmar.</p>' : '')
-    + '</div>';
-
+  var html = '<p class="nota">Itinerario completo. El mismo equipo y veh\u00edculo quedan reservados en todas las fechas.</p>';
+  p.jornadasCalculadas.forEach(function (j) {
+    html += '<h3 style="margin-top:1rem">' + esc(fechaLarga(j.Fecha)) + '</h3><table class="datos"><tbody>'
+      + fila('Recorrido', recorridoTexto(j)) + fila('Equipo', j.Tecnicos.map(nombreTecnico).join(', '))
+      + fila('Camioneta / conductor', j.ID_Vehiculo + ' / ' + nombreTecnico(j.Conductor))
+      + fila('Equipos de la cuadrilla', j.Equipos) + fila('Kil\u00f3metros', Math.round(j.Km))
+      + fila('Duraci\u00f3n', formatoHoras(j.Horas_Totales))
+      + fila('Hotel por persona', j.Noches ? j.Noches + ' noche' : 'Sin pernoctaci\u00f3n')
+      + '</tbody></table>';
+  });
+  html += '<div class="plata-fila total"><span>Incremento del presupuesto, con reserva y redondeo</span><strong>' + esc(clp(p.costo)) + '</strong></div>'
+    + '<div class="acciones-tel"><button class="boton" data-accion="confirmar">Confirmar itinerario</button> '
+    + '<button class="boton secundario" data-accion="descartar">Descartar</button></div>';
   return html;
 }
 
@@ -332,6 +302,13 @@ function validarAsignacion() {
   if (!conductor || !conductor.Licencia) { return 'El conductor elegido no tiene licencia.'; }
   if (s.tecnicos.indexOf(s.conductor) === -1) { return 'El conductor tiene que ir en el equipo.'; }
   if (!s.vehiculo) { return 'Falta elegir la camioneta.'; }
+  if (!estado.flota.some(function (v) { return v.ID_Vehiculo === s.vehiculo && v.Estado !== 'Taller'; })) { return 'La camioneta no existe o está en taller.'; }
+  try {
+    var copia = clonar(estado), j = copia.jornadas.find(function (j) { return j.ID_Jornada === s.jornada; });
+    exigir(j && !jornadaProtegida(estado, s.jornada), 'La jornada tiene registros protegidos o no existe.');
+    j.Tecnicos = s.tecnicos.slice(); j.Conductor = s.conductor; j.ID_Vehiculo = s.vehiculo;
+    validarPlanOperativo(copia);
+  } catch (err) { return err.message; }
   return null;
 }
 
@@ -351,7 +328,7 @@ function vistaCalendario() {
 
   var html = '<div class="panel"><h2>Calendario</h2>'
     + '<p class="nota">Arrastra una jornada a otro día para reprogramarla. Al soltarla se revalidan los topes '
-    + 'y se recalcula el plan. Nunca se agenda sabado ni domingo.</p>'
+    + 'de recursos, la continuidad de salida y retorno, y las evidencias protegidas. Nunca se agenda sabado ni domingo.</p>'
     + '<div class="tabla-envoltorio"><div class="calendario" style="grid-template-columns:repeat(' + dias.length + ',minmax(150px,1fr));min-width:' + (dias.length * 158) + 'px">';
 
   dias.forEach(function (fecha) {
@@ -359,12 +336,14 @@ function vistaCalendario() {
     html += '<div class="dia" data-fecha="' + esc(fecha) + '">'
       + '<header>' + esc(fechaCorta(fecha)) + '</header>'
       + delDia.map(function (j) {
-        return '<div class="tarjeta-jornada' + (j.Alertas.length ? ' con-alerta' : '') + '" draggable="true" data-jornada="' + esc(j.ID_Jornada) + '">'
+        return '<div class="tarjeta-jornada' + (j.Alertas.length ? ' con-alerta' : '') + '" draggable="' + (!jornadaProtegida(estado, j.ID_Jornada)) + '" data-jornada="' + esc(j.ID_Jornada) + '">'
           + '<strong>' + esc(j.ID_Jornada) + ' · ' + esc(j.ID_Vehiculo) + '</strong>'
           + '<span class="detalle">' + esc(recorridoTexto(j)) + '</span>'
           + '<span class="detalle">' + esc(j.Tecnicos.map(nombreTecnico).join(', ')) + '</span>'
           + '<span class="detalle">' + esc(formatoHoras(j.Horas_Totales))
           + (j.Noches ? ' · ' + j.Noches + ' noche(s)' : '') + '</span>'
+          + '<label class="campo"><span>Reprogramar fecha</span><input type="date" data-fecha-jornada="' + esc(j.ID_Jornada) + '" value="' + esc(j.Fecha) + '"' + (jornadaProtegida(estado, j.ID_Jornada) ? ' disabled' : '') + '></label>'
+          + (jornadaProtegida(estado, j.ID_Jornada) ? '<span class="marca">Con registros · fecha protegida</span>' : '')
           + '</div>';
       }).join('')
       + (delDia.length ? '' : '<span class="nota">Sin jornadas</span>')
@@ -459,14 +438,14 @@ function vistaFlota() {
 
 function vistaCapacitacion() {
   var pendientes = estado.destinos.filter(function (d) { return d.Equipos > 0 && !d.Link_Enviado; });
-  var elegido = pendientes[0] || estado.destinos.filter(function (d) { return d.Equipos > 0; })[0];
+  var elegido = buscarDestino(destinoCorreoSeleccionado) || pendientes[0] || estado.destinos.filter(function (d) { return d.Equipos > 0; })[0];
 
   var html = '<div class="columnas">';
 
-  html += '<div class="panel"><h2>Enviar capacitación</h2>'
+  html += '<div class="panel"><h2>Registrar capacitación previa</h2>'
     + '<p class="nota">Mandar el link antes de la visita baja la capacitación presencial de '
     + esc(formatoHoras(estado.parametros.P_T_CAPACITACION)) + ' a '
-    + esc(formatoHoras(estado.parametros.P_T_CAP_EFECTIVA)) + '. El plan se recalcula al enviarlo.</p>';
+    + esc(formatoHoras(estado.parametros.P_T_CAP_EFECTIVA)) + '. Registra aquí el aviso realizado al cliente.</p>';
 
   if (!elegido) {
     html += '<div class="vacio">No hay destinos con equipos por instalar.</div></div>';
@@ -481,11 +460,11 @@ function vistaCapacitacion() {
       + campoTexto('mail', 'Correo del cliente', elegido.Mail_Cliente || 'contacto@' + sinTildes(elegido.Comuna).toLowerCase().replace(/ /g, '') + '.cl', 'email')
       + campoTexto('asunto', 'Asunto', 'Capacitación previa a la instalación en ' + elegido.Comuna)
       + '<label class="campo"><span>Mensaje</span><textarea name="cuerpo">' + esc(cuerpoCorreoPorDefecto(elegido)) + '</textarea></label>'
-      + '<button type="button" class="boton" data-accion="enviar-correo">Enviar capacitación</button>'
+      + '<button type="button" class="boton" data-accion="enviar-correo">Registrar aviso realizado</button>'
       + '</form></div>';
 
     html += '<div class="panel"><h2>Vista previa</h2>'
-      + '<p class="nota">Asi le llega al cliente. El enlace es de demostración.</p>'
+      + '<p class="nota">Vista previa del mensaje de capacitación.</p>'
       + '<div class="sobre" id="previsualizacion">' + sobreCorreo(elegido) + '</div></div>';
   }
 
@@ -493,7 +472,7 @@ function vistaCapacitacion() {
 
   html += bloqueAhorroCapacitacion(pendientes);
 
-  html += '<div class="panel"><h2>Enviados</h2>';
+  html += '<div class="panel"><h2>Avisos registrados</h2>';
   if (!estado.correos.length) {
     html += '<div class="vacio">Todavia no se ha enviado ninguna capacitación. '
       + 'Cada envio baja el tiempo presencial a la mitad en esa comuna.</div>';
@@ -643,6 +622,12 @@ function manejarAccionCoordinador(evento) {
 
 function manejarCambioCoordinador(evento) {
   var campo = evento.target;
+  if (campo.hasAttribute('data-fecha-jornada')) {
+    var id = campo.getAttribute('data-fecha-jornada');
+    if (!despachar('moverJornada', { idJornada: id, fecha: campo.value })) { campo.value = buscarJornada(id).Fecha; }
+    else { alertaSuave('Fecha actualizada y secuencia verificada.', 'ruta'); }
+    return;
+  }
   if (campo.name === 'region' && el('#form-trabajo')) {
     var select = el('[name="comuna"]', el('#form-trabajo'));
     var comunas = REGIONES[campo.value] || [];
@@ -653,11 +638,14 @@ function manejarCambioCoordinador(evento) {
   } else if (campo.name === 'comuna') {
     rellenarKmComuna();
   } else if (campo.name === 'destino' && el('#form-correo')) {
+    destinoCorreoSeleccionado = campo.value;
     dibujarPestanaCoordinador();
   }
+  if (el('#form-trabajo')) { invalidarPropuesta(); }
 }
 
 function manejarEntradaCoordinador(evento) {
+  if (el('#form-trabajo')) { invalidarPropuesta(); return; }
   var form = el('#form-correo');
   if (!form || !form.contains(evento.target)) { return; }
   var datos = leerFormulario('#form-correo');
@@ -670,102 +658,79 @@ function manejarEntradaCoordinador(evento) {
 function rellenarKmComuna() {
   var form = el('#form-trabajo');
   if (!form) { return; }
-  var comuna = el('[name="comuna"]', form).value;
-  var region = el('[name="region"]', form).value;
-  var conocido = estado.destinos.filter(function (d) { return d.Comuna === comuna; })[0];
-  var ref = REFERENCIA_REGION[region] || REFERENCIA_REGION.Metropolitana;
-  el('[name="km"]', form).value = conocido ? conocido.Km_Ida : ref.km;
-  el('[name="peaje"]', form).value = conocido ? conocido.Peaje_Ida : ref.peaje;
-  el('#nota-km').textContent = conocido
-    ? 'Kilómetros y peaje de ' + comuna + ' tomados de la tabla de destinos: consulta real a Google Maps y catalogo MOP.'
-    : comuna + ' no esta en la tabla de destinos. Se propone la referencia de ' + region + '; corrige los kilómetros si los conoces.';
+  var comuna = el('[name="comuna"]', form).value, region = el('[name="region"]', form).value;
+  var conocido = referenciaComuna(comuna, region, estado);
+  el('[name="km"]', form).value = conocido ? conocido.Km_Ida : '';
+  el('[name="peaje"]', form).value = conocido ? conocido.Peaje_Ida : '';
+  el('#nota-km').textContent = conocido ? 'Referencia del plan para esta comuna. Revisa los km y peajes para la nueva direcci\u00f3n.' : 'Sin ruta registrada: ingresa km y peajes verificados. No se sustituye esta comuna por la capital regional.';
 }
-
+function restaurarBorradorTrabajo() {
+  if (!borradorTrabajo) { rellenarKmComuna(); return; }
+  var form = el('#form-trabajo');
+  Object.keys(borradorTrabajo).forEach(function (k) { var campo = form.elements.namedItem(k); if (campo) { campo.value = borradorTrabajo[k]; } });
+  el('#nota-km').textContent = 'Se conservan los datos ingresados. Al confirmar se revalidan todas las jornadas.';
+}
+function invalidarPropuesta() {
+  if (!el('#form-trabajo')) { return; }
+  borradorTrabajo = leerFormulario('#form-trabajo');
+  propuestaActual = null;
+  var panel = el('#panel-propuesta');
+  if (panel) { panel.innerHTML = '<h2>Simulaci\u00f3n</h2><p class="nota">Los datos cambiaron. Vuelve a simular antes de confirmar.</p>'; }
+}
 function datosTrabajo() {
   var d = leerFormulario('#form-trabajo');
   if (!d) { return null; }
-  if (!d.empresa || !d.direccion || !d.cliente || !d.mail || !d.fecha) {
-    alertaSuave('Faltan datos: empresa, calle, cliente, correo y fecha son obligatorios.');
-    return null;
-  }
-  if (d.equipos < 1) { alertaSuave('Tiene que haber al menos un equipo.'); return null; }
-  var ref = REFERENCIA_REGION[d.region] || REFERENCIA_REGION.Metropolitana;
-  var conocido = estado.destinos.filter(function (x) { return x.Comuna === d.comuna; })[0];
-  d.corredor = conocido ? conocido.Corredor : ref.corredor;
-  d.lat = conocido ? conocido.Lat : ref.lat;
-  d.lng = conocido ? conocido.Lng : ref.lng;
-  return d;
+  try {
+    ['km', 'peaje', 'equipos', 'tecnicos'].forEach(function (k) { exigir(el('#form-trabajo').elements.namedItem(k).value.trim() !== '', 'Completa el campo ' + k + '.'); });
+    validarEntradaTrabajo(d, estado.parametros);
+    var conocido = referenciaComuna(d.comuna, d.region, estado);
+    d.corredor = conocido ? conocido.Corredor : esRegionRM(d.region) ? 'URB' : ['Arica y Parinacota', 'Tarapac\u00e1', 'Antofagasta', 'Atacama', 'Coquimbo'].indexOf(d.region) !== -1 ? 'R5N' : 'R5S';
+    return d;
+  } catch (err) { alertaSuave(err.message, 'alerta'); return null; }
 }
-
+function equipoParaTrabajo(d) {
+  var candidatos = estado.tecnicos.filter(function (t) { return t.Activo; });
+  candidatos.sort(function (a, b) { return plan.nomina.find(function (n) { return n.ID_Tecnico === a.ID_Tecnico; }).Horas - plan.nomina.find(function (n) { return n.ID_Tecnico === b.ID_Tecnico; }).Horas; });
+  var equipos = [];
+  function combinar(desde, grupo) {
+    if (grupo.length === d.tecnicos) { equipos.push(grupo); return; }
+    for (var i = desde; i < candidatos.length; i++) { combinar(i + 1, grupo.concat([candidatos[i]])); }
+  }
+  combinar(0, []);
+  var mensaje = 'No hay equipo disponible para todas las fechas y ubicaciones del viaje.';
+  for (var i = 0; i < equipos.length; i++) {
+    var conductor = equipos[i].find(function (t) { return t.Licencia; }); if (!conductor) { continue; }
+    for (var v = 0; v < estado.flota.length; v++) {
+      if (estado.flota[v].Estado === 'Taller') { continue; }
+      var entrada = Object.assign({}, d, { tecnicos: equipos[i].map(function (t) { return t.ID_Tecnico; }), conductor: conductor.ID_Tecnico, vehiculo: estado.flota[v].ID_Vehiculo });
+      try { return { entrada: entrada, preparado: prepararTrabajo(entrada, estado) }; }
+      catch (err) { mensaje = err.message; }
+    }
+  }
+  throw new Error(mensaje);
+}
 function simularTrabajo() {
-  var d = datosTrabajo();
-  if (!d) { return; }
-
-  var propuesta = autoasignar(estado, plan, d.fecha, d.tecnicos);
-  if (!propuesta.ok) { alertaSuave(propuesta.motivo); return; }
-
-  /* Se simula sobre una copia del estado: nada se escribe hasta que el coordinador confirma. */
-  var copia = JSON.parse(JSON.stringify(estado));
-  var destinoSimulado = copia.destinos.filter(function (x) { return x.Comuna === d.comuna; })[0];
-  if (!destinoSimulado) {
-    destinoSimulado = {
-      ID_Destino: 'SIM', Comuna: d.comuna, Region: d.region, En_RM: d.region === 'Metropolitana',
-      Corredor: d.corredor, Km_Ida: d.km, Peaje_Ida: d.peaje, Equipos: d.equipos,
-      Lat: d.lat, Lng: d.lng, Link_Enviado: false
-    };
-    copia.destinos.push(destinoSimulado);
-  }
-
-  var pernocta = (d.km / velocidadCorredor(d.corredor, copia.parametros)) * copia.parametros.P_FACTOR_HORAS > copia.parametros.P_UMBRAL_PERNOCTA;
-  var jornadaSimulada = {
-    ID_Jornada: 'SIMULACION',
-    Fecha: d.fecha,
-    ID_Vehiculo: propuesta.vehiculo,
-    Tecnicos: propuesta.tecnicos,
-    Conductor: propuesta.conductor,
-    Tramos: [
-      { Origen: 'BASE', Destino: destinoSimulado.ID_Destino, Km: d.km, Peaje: d.peaje, Equipos: d.equipos, Noches: pernocta ? 1 : 0, Corredor: d.corredor },
-      { Origen: destinoSimulado.ID_Destino, Destino: 'BASE', Km: d.km, Peaje: d.peaje, Equipos: 0, Noches: 0, Corredor: d.corredor }
-    ]
-  };
-
-  var calculada = calcularJornada(jornadaSimulada, copia);
-  var n = calculada.Tecnicos.length;
-  var costo = calculada.Combustible + calculada.Peaje + calculada.Desgaste
-    + calculada.Estipendio * n + calculada.Hotel * n + calculada.Costo_Horas_Extra * n;
-
-  propuestaActual = {
-    entrada: d,
-    propuesta: propuesta,
-    jornadaCalculada: calculada,
-    costo: costo
-  };
-  dibujarPestanaCoordinador();
-  alertaSuave(propuesta.motivo, 'ruta');
+  var d = datosTrabajo(); if (!d) { return; }
+  try {
+    var seleccion = equipoParaTrabajo(d), preparado = seleccion.preparado;
+    var calculadas = preparado.jornadas.map(function (j) { return preparado.plan.jornadasPorId[j.ID_Jornada]; });
+    propuestaActual = { entrada: d, confirmacion: seleccion.entrada,
+      propuesta: { tecnicos: seleccion.entrada.tecnicos, conductor: seleccion.entrada.conductor, vehiculo: seleccion.entrada.vehiculo },
+      jornadaCalculada: calculadas[0], jornadasCalculadas: calculadas,
+      costo: preparado.plan.resumen.Costo_Total - plan.resumen.Costo_Total };
+    borradorTrabajo = d;
+    dibujarPestanaCoordinador();
+    alertaSuave('Itinerario y recursos disponibles verificados para ' + calculadas.length + ' jornada(s).', 'ruta');
+  } catch (err) { propuestaActual = null; alertaSuave(err.message, 'alerta'); }
 }
-
-function autoasignarFormulario() {
-  var d = datosTrabajo();
-  if (!d) { return; }
-  var propuesta = autoasignar(estado, plan, d.fecha, d.tecnicos);
-  alertaSuave(propuesta.ok ? propuesta.motivo : propuesta.motivo, propuesta.ok ? 'ruta' : 'alerta');
-}
-
+function autoasignarFormulario() { simularTrabajo(); }
 function confirmarTrabajo() {
   if (!propuestaActual) { return; }
-  var d = propuestaActual.entrada;
-  var p = propuestaActual.propuesta;
-  var idJornada = despachar('crearTrabajo', {
-    empresa: d.empresa, region: d.region, comuna: d.comuna,
-    direccion: d.direccion, numero: d.numero, cliente: d.cliente, mail: d.mail,
-    equipos: d.equipos, fecha: d.fecha, km: d.km, peaje: d.peaje,
-    corredor: d.corredor, lat: d.lat, lng: d.lng,
-    tecnicos: p.tecnicos, conductor: p.conductor, vehiculo: p.vehiculo
-  });
-  propuestaActual = null;
-  pestanaCoordinador = 'ordenes';
+  var id = despachar('crearTrabajo', propuestaActual.confirmacion);
+  if (!id) { return; }
+  propuestaActual = null; borradorTrabajo = null; pestanaCoordinador = 'ordenes';
   dibujarCoordinador(el('#aplicacion'));
-  alertaSuave('Jornada ' + idJornada + ' creada con ' + p.tecnicos.length + ' orden(es) de trabajo.', 'ruta');
+  alertaSuave('Itinerario creado desde la jornada ' + id + '.', 'ruta');
 }
 
 function elegirJornada(idJornada) {
@@ -801,23 +766,27 @@ function alternarTecnico(idTecnico) {
 function guardarAsignacion() {
   var problema = validarAsignacion();
   if (problema) { alertaSuave(problema, 'alerta'); return; }
-  despachar('asignar', {
+  var resultado = despachar('asignar', {
     idJornada: seleccionAsignacion.jornada,
     tecnicos: seleccionAsignacion.tecnicos.slice(),
     conductor: seleccionAsignacion.conductor,
     vehiculo: seleccionAsignacion.vehiculo
   });
+  if (!resultado) { return; }
   alertaSuave('Equipo de ' + seleccionAsignacion.jornada + ' actualizado.', 'ruta');
 }
 
 function autoasignarJornada() {
   var j = plan.jornadasPorId[seleccionAsignacion.jornada];
   if (!j) { return; }
-  var propuesta = autoasignar(estado, plan, j.Fecha, Math.max(1, j.Tecnicos.length));
+  var propuesta = autoasignar(estado, plan, j.Fecha, Math.max(1, j.Tecnicos.length), j.ID_Jornada);
   if (!propuesta.ok) { alertaSuave(propuesta.motivo, 'alerta'); return; }
+  var anterior = clonar(seleccionAsignacion);
   seleccionAsignacion.tecnicos = propuesta.tecnicos;
   seleccionAsignacion.conductor = propuesta.conductor;
   seleccionAsignacion.vehiculo = propuesta.vehiculo;
+  var problema = validarAsignacion();
+  if (problema) { seleccionAsignacion = anterior; alertaSuave(problema, 'alerta'); return; }
   dibujarPestanaCoordinador();
   alertaSuave(propuesta.motivo, 'ruta');
 }
@@ -827,14 +796,15 @@ function enviarCapacitacion() {
   if (!d || !d.mail) { alertaSuave('Falta el correo del cliente.', 'alerta'); return; }
   var destino = buscarDestino(d.destino);
   if (!destino) { return; }
-  despachar('enviarCapacitacion', {
+  var resultado = despachar('enviarCapacitacion', {
     idDestino: d.destino,
     mail: d.mail,
     asunto: d.asunto,
     cuerpo: d.cuerpo,
     link: enlaceCapacitacion(destino)
   });
-  alertaSuave('Capacitación enviada a ' + destino.Comuna + '. La sesión presencial baja a '
+  if (!resultado) { return; }
+  alertaSuave('Aviso de capacitación registrado para ' + destino.Comuna + '. La sesión presencial baja a '
     + formatoHoras(estado.parametros.P_T_CAP_EFECTIVA) + ' y el plan ya se recalculo.', 'ruta');
 }
 
@@ -847,7 +817,7 @@ function exportarNomina() {
     filas.push([
       n.ID_Tecnico,
       n.Nombre,
-      rutFicticio(i),
+      (buscarTecnico(n.ID_Tecnico) || {}).RUT || '',
       n.Email,
       Math.round(n.Total),
       Math.round(n.Reserva),
@@ -857,25 +827,10 @@ function exportarNomina() {
   });
 
   var csv = filas.map(function (f) {
-    return f.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(';');
+    return f.map(function (c) { return '"' + (/^[=+@\-\t\r]/.test(String(c)) ? "'" : '') + String(c).replace(/"/g, '""') + '"'; }).join(';');
   }).join('\r\n');
 
   descargar('nomina-transferencias.csv', '﻿' + csv, 'text/csv;charset=utf-8');
-}
-
-/* RUT de demostracion con digito verificador valido, para que el CSV se vea real.
-   No corresponde a ninguna persona. */
-function rutFicticio(indice) {
-  var numero = 11000000 + indice * 1234567;
-  var suma = 0, multiplo = 2, resto = numero;
-  while (resto > 0) {
-    suma += (resto % 10) * multiplo;
-    resto = Math.floor(resto / 10);
-    multiplo = multiplo === 7 ? 2 : multiplo + 1;
-  }
-  var dv = 11 - (suma % 11);
-  var digito = dv === 11 ? '0' : dv === 10 ? 'K' : String(dv);
-  return numero.toLocaleString('es-CL') + '-' + digito;
 }
 
 function descargar(nombre, contenido, tipo) {

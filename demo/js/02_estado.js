@@ -43,10 +43,15 @@ function clonar(objeto) { return JSON.parse(JSON.stringify(objeto)); }
 
 function completarEstado(e) {
   if (!e.pagos) { e.pagos = {}; }
+  if (!e.reembolsos) { e.reembolsos = {}; }
   if (!e.gastos) { e.gastos = []; }
   if (!e.correos) { e.correos = []; }
   if (!e.trabajos) { e.trabajos = []; }
   if (!e.consecutivos) { e.consecutivos = { jornada: e.jornadas.length, orden: e.ordenes.length, gasto: 0, correo: 0, destino: e.destinos.length }; }
+  var anterior = recalcularPlan(e);
+  anterior.nomina.forEach(function (n) {
+    if (e.pagos[n.ID_Tecnico] === true) { e.pagos[n.ID_Tecnico] = { Monto: n.Total, Fecha: null, Origen: 'Convertido desde registro anterior' }; }
+  });
   return e;
 }
 
@@ -73,6 +78,8 @@ function persistir() {
 
 function recalcular() {
   plan = recalcularPlan(estado);
+  try { validarPlanOperativo(estado); }
+  catch (err) { plan.alertas.unshift({ nivel: 'alto', origen: 'Validación del plan', fecha: '', texto: err.message }); }
 }
 
 function suscribir(fn) { suscriptores.push(fn); }
@@ -83,11 +90,24 @@ function notificar() {
 
 /* Punto unico de escritura. Recalcula, guarda y redibuja las tres vistas. */
 function despachar(accion, carga) {
-  var resultado = ACCIONES[accion] ? ACCIONES[accion](carga) : null;
-  recalcular();
+  var original = estado;
+  ultimoError = '';
+  try {
+    exigir(!!ACCIONES[accion], 'Acción inexistente.');
+    validarAccion(accion, carga || {}, estado);
+    estado = clonar(estado);
+    var resultado = ACCIONES[accion](carga || {});
+    if (['moverJornada', 'asignar', 'crearTrabajo', 'parametro', 'restaurarParametros'].indexOf(accion) !== -1) { validarPlanOperativo(estado); }
+    recalcular();
+  } catch (err) {
+    estado = original;
+    ultimoError = err.message;
+    if (typeof alertaSuave === 'function') { alertaSuave(ultimoError, 'alerta'); }
+    return null;
+  }
   persistir();
   notificar();
-  return resultado;
+  return resultado === undefined ? true : resultado;
 }
 
 function buscarOrden(idOrden) {
@@ -149,6 +169,7 @@ var ACCIONES = {
 
   reiniciar: function () {
     estado = completarEstado(construirSemilla());
+    if (typeof cargarEscenarioFinanciero === 'function') { cargarEscenarioFinanciero(estado); }
   },
 
   parametro: function (c) {
@@ -168,7 +189,7 @@ var ACCIONES = {
 
   marcarChecklist: function (c) {
     var orden = buscarOrden(c.idOrden);
-    if (!orden) { return; }
+    if (!orden || orden.Hora_Inicio) { return; }
     orden.Checklist.forEach(function (item) {
       if (item.ID_Implemento === c.idImplemento) {
         item.Marcado = c.marcado;
@@ -186,6 +207,7 @@ var ACCIONES = {
     var orden = buscarOrden(c.idOrden);
     if (!orden || !checklistCompleto(orden) || orden.Hora_Inicio) { return; }
     orden.Hora_Inicio = new Date().toISOString();
+    orden.Horas_Plan_Inicio = plan.jornadasPorId[orden.ID_Jornada].Horas_Totales;
     orden.Coord_Inicio = c.coordenadas || null;
     orden.Estado = 'En curso';
   },
@@ -193,6 +215,9 @@ var ACCIONES = {
   finalizarTrabajo: function (c) {
     var orden = buscarOrden(c.idOrden);
     if (!orden || !orden.Hora_Inicio || orden.Hora_Fin) { return; }
+    var jornada = plan.jornadasPorId[orden.ID_Jornada];
+    if (!jornada || !Number.isInteger(c.equipos) || c.equipos < 0 || c.equipos > jornada.Equipos) { return; }
+    if (jornada.Equipos > 0 && (!c.firma || !c.foto)) { return; }
     orden.Hora_Fin = new Date().toISOString();
     orden.Coord_Fin = c.coordenadas || null;
     orden.Equipos_Instalados = c.equipos || 0;
@@ -203,6 +228,8 @@ var ACCIONES = {
   },
 
   agregarGasto: function (c) {
+    var orden = buscarOrden(c.idOrden);
+    if (!orden || orden.ID_Tecnico !== c.idTecnico || !Number.isSafeInteger(c.monto) || c.monto <= 0 || !c.comprobante) { return; }
     estado.consecutivos.gasto++;
     estado.gastos.push({
       ID_Gasto: 'G' + pad4(estado.consecutivos.gasto),
@@ -230,80 +257,44 @@ var ACCIONES = {
   },
 
   marcarPago: function (c) {
-    estado.pagos[c.idTecnico] = !estado.pagos[c.idTecnico];
+    var n = plan.nomina.find(function (n) { return n.ID_Tecnico === c.idTecnico; });
+    exigir(n, 'Técnico inexistente.');
+    exigir(n.Por_Transferir > 0, 'No hay anticipo pendiente para este técnico.');
+    estado.pagos[c.idTecnico] = { Monto: n.Transferido + n.Por_Transferir, Fecha: new Date().toISOString() };
   },
 
   pagarTodo: function () {
     plan.nomina.forEach(function (n) {
-      if (n.Total > 0) { estado.pagos[n.ID_Tecnico] = true; }
+      if (n.Por_Transferir > 0) { estado.pagos[n.ID_Tecnico] = { Monto: n.Transferido + n.Por_Transferir, Fecha: new Date().toISOString() }; }
     });
+  },
+
+  pagarReembolso: function (c) {
+    var n = plan.nomina.find(function (n) { return n.ID_Tecnico === c.idTecnico; });
+    exigir(n && n.Por_Reembolsar > 0, 'No hay rendiciones aprobadas pendientes de reembolso.');
+    estado.reembolsos[c.idTecnico] = { Monto: n.Reembolsado + n.Por_Reembolsar, Fecha: new Date().toISOString() };
   },
 
   /* --- Coordinador --- */
 
   crearTrabajo: function (c) {
-    /* Reutiliza el destino si ya existe esa comuna; si no, lo crea con los datos del formulario. */
-    var destino = estado.destinos.filter(function (d) { return d.Comuna === c.comuna; })[0];
-    if (!destino) {
-      estado.consecutivos.destino++;
-      destino = {
-        ID_Destino: 'D' + pad2(estado.consecutivos.destino),
-        Comuna: c.comuna,
-        Region: c.region,
-        Direccion: c.direccion + ' ' + c.numero + ', ' + c.comuna,
-        En_RM: c.region === 'Metropolitana',
-        Corredor: c.corredor,
-        Km_Ida: c.km,
-        Peaje_Ida: c.peaje,
-        Equipos: 0,
-        Hotel_Referencia: c.km > 300 ? 'Centro de ' + c.comuna : 'Retorno en el día',
-        Lat: c.lat,
-        Lng: c.lng,
-        Empresa: c.empresa,
-        Contacto: c.cliente,
-        Mail_Cliente: c.mail,
-        Link_Enviado: false
-      };
-      estado.destinos.push(destino);
-    } else {
-      destino.Empresa = c.empresa;
-      destino.Contacto = c.cliente;
-      destino.Mail_Cliente = c.mail;
-      destino.Direccion = c.direccion + ' ' + c.numero + ', ' + c.comuna;
-    }
-    destino.Equipos += c.equipos;
-
-    estado.consecutivos.jornada++;
-    var idJornada = 'J' + pad2(estado.consecutivos.jornada);
-    var pernocta = (destino.Km_Ida / 80) * estado.parametros.P_FACTOR_HORAS > estado.parametros.P_UMBRAL_PERNOCTA;
-    var jornada = {
-      ID_Jornada: idJornada,
-      Dia: 0,
-      Fecha: c.fecha,
-      ID_Vehiculo: c.vehiculo,
-      Tecnicos: c.tecnicos.slice(),
-      Conductor: c.conductor,
-      Tramos: [
-        { Origen: 'BASE', Destino: destino.ID_Destino, Km: destino.Km_Ida, Peaje: destino.Peaje_Ida, Equipos: c.equipos, Noches: pernocta ? 1 : 0, Corredor: destino.Corredor },
-        { Origen: destino.ID_Destino, Destino: 'BASE', Km: destino.Km_Ida, Peaje: destino.Peaje_Ida, Equipos: 0, Noches: 0, Corredor: destino.Corredor }
-      ]
-    };
-    estado.jornadas.push(jornada);
-
-    c.tecnicos.forEach(function (idTecnico) {
-      estado.consecutivos.orden++;
-      estado.ordenes.push({
-        ID_Orden: 'O' + pad4(estado.consecutivos.orden),
-        ID_Jornada: idJornada,
-        ID_Tecnico: idTecnico,
-        Es_Conductor: idTecnico === c.conductor,
-        Fecha: c.fecha,
-        Estado: 'Planificada',
-        Checklist: estado.implementos.map(function (im) {
-          return { ID_Implemento: im.ID_Implemento, Marcado: false, Hora: null };
-        }),
-        Hora_Inicio: null, Hora_Fin: null, Coord_Inicio: null, Coord_Fin: null,
-        Equipos_Instalados: 0, Firma: null, Foto: null, Observaciones: ''
+    var preparado = prepararTrabajo(c, estado);
+    estado.destinos.push(preparado.destino);
+    estado.consecutivos.destino++;
+    var idJornada = preparado.jornadas[0].ID_Jornada;
+    preparado.jornadas.forEach(function (jornada) {
+      estado.jornadas.push(jornada);
+      estado.consecutivos.jornada++;
+      jornada.Tecnicos.forEach(function (idTecnico) {
+        estado.consecutivos.orden++;
+        estado.ordenes.push({
+          ID_Orden: 'O' + pad4(estado.consecutivos.orden), ID_Jornada: jornada.ID_Jornada,
+          ID_Tecnico: idTecnico, Es_Conductor: idTecnico === jornada.Conductor, Fecha: jornada.Fecha,
+          Estado: 'Planificada', Checklist: estado.implementos.map(function (im) {
+            return { ID_Implemento: im.ID_Implemento, Marcado: false, Hora: null };
+          }), Hora_Inicio: null, Hora_Fin: null, Coord_Inicio: null, Coord_Fin: null,
+          Equipos_Instalados: 0, Firma: null, Foto: null, Observaciones: ''
+        });
       });
     });
 
@@ -359,6 +350,7 @@ var ACCIONES = {
     var jornada = buscarJornada(c.idJornada);
     if (!jornada) { return; }
     jornada.Fecha = c.fecha;
+    estado.trabajos.forEach(function (t) { if (t.ID_Jornada === c.idJornada) { t.Fecha = c.fecha; } });
     estado.ordenes.forEach(function (o) {
       if (o.ID_Jornada === c.idJornada) { o.Fecha = c.fecha; }
     });
@@ -385,7 +377,7 @@ var ACCIONES = {
       Cuerpo: c.cuerpo,
       Link: c.link,
       Enviado: new Date().toISOString(),
-      Estado: 'Enviado'
+      Estado: 'Registrado'
     });
   }
 };

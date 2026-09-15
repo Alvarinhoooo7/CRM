@@ -59,7 +59,7 @@ function calcularJornada(jornada, estado) {
 
   var horasTotales = horasViaje + horasInstalacion + horasCapacitacion;
   var horasExtraBrutas = Math.max(0, horasTotales - p.P_JORNADA_DIA);
-  var horasExtra = Math.min(horasExtraBrutas, p.P_MAX_EXTRA);
+  var horasExtra = horasExtraBrutas;
 
   var combustible = (km / p.P_RENDIMIENTO) * p.P_DIESEL;
   var desgaste = km * p.P_COSTO_KM;
@@ -95,7 +95,7 @@ function calcularJornada(jornada, estado) {
     alertas.push({ nivel: 'alto', texto: vehiculo.ID_Vehiculo + ' está en taller' });
   }
   if (horasExtraBrutas > p.P_MAX_EXTRA) {
-    alertas.push({ nivel: 'medio', texto: 'Excede el tope de horas extra: se pagan ' + formatoHoras(p.P_MAX_EXTRA) + ' de ' + formatoHoras(horasExtraBrutas) });
+    alertas.push({ nivel: 'medio', texto: 'Excede el tope de horas extra: ' + formatoHoras(horasExtraBrutas) + '. Debe replanificarse; el costo conserva todas las horas.' });
   }
   if (noches === 0 && horasViaje / 2 > p.P_UMBRAL_PERNOCTA) {
     alertas.push({ nivel: 'medio', texto: 'La ida supera ' + formatoHoras(p.P_UMBRAL_PERNOCTA) + ' y no hay pernoctación planificada' });
@@ -184,9 +184,10 @@ function recalcularPlan(estado) {
 
   /* Ejecución real reportada por los tecnicos desde el telefono. */
   var equiposInstalados = 0, ordenesCerradas = 0, ordenesIniciadas = 0, horasReales = 0;
-  var checklistCompletos = 0;
+  var checklistCompletos = 0, instaladosPorJornada = {};
   estado.ordenes.forEach(function (o) {
-    equiposInstalados += o.Equipos_Instalados || 0;
+    /* Cada técnico confirma el total de su cuadrilla; se cuenta una vez. */
+    if (o.Hora_Fin) { instaladosPorJornada[o.ID_Jornada] = Math.max(instaladosPorJornada[o.ID_Jornada] || 0, o.Equipos_Instalados || 0); }
     if (o.Hora_Inicio) { ordenesIniciadas++; }
     if (o.Hora_Fin) { ordenesCerradas++; }
     if (o.Hora_Inicio && o.Hora_Fin) {
@@ -194,6 +195,7 @@ function recalcularPlan(estado) {
     }
     if (checklistCompleto(o)) { checklistCompletos++; }
   });
+  equiposInstalados = Object.keys(instaladosPorJornada).reduce(function (s, id) { return s + instaladosPorJornada[id]; }, 0);
 
   var rendido = 0, rendidoPorTecnico = {};
   estado.gastos.forEach(function (g) {
@@ -205,9 +207,15 @@ function recalcularPlan(estado) {
   var pagos = estado.pagos || {};
   var transferido = 0;
   nomina.forEach(function (n) {
-    n.Transferido = pagos[n.ID_Tecnico] ? n.Total : 0;
+    var pago = pagos[n.ID_Tecnico];
+    n.Transferido = pago === true ? n.Total : pago && Number.isFinite(pago.Monto) ? pago.Monto : 0;
+    n.Por_Transferir = Math.max(0, n.Total - n.Transferido);
+    n.Exceso_Anticipo = Math.max(0, n.Transferido - n.Total);
     n.Rendido = rendidoPorTecnico[n.ID_Tecnico] || 0;
-    n.Saldo = n.Transferido - n.Rendido;
+    n.Reembolsado = ((estado.reembolsos || {})[n.ID_Tecnico] || {}).Monto || 0;
+    n.Por_Transferir = Math.max(0, n.Total - n.Transferido - n.Reembolsado);
+    n.Por_Reembolsar = Math.max(0, n.Rendido - n.Transferido - n.Reembolsado);
+    n.Saldo = n.Transferido + n.Reembolsado - n.Rendido;
     transferido += n.Transferido;
   });
 
@@ -239,8 +247,11 @@ function recalcularPlan(estado) {
   resumen.Reserva = nomina.reduce(function (a, n) { return a + n.Reserva; }, 0);
   resumen.Costo_Total = resumen.Nomina + resumen.Desgaste + resumen.Costo_Horas_Extra;
   resumen.Transferido = transferido;
+  resumen.Por_Transferir = nomina.reduce(function (s, n) { return s + n.Por_Transferir; }, 0);
+  resumen.Por_Reembolsar = nomina.reduce(function (s, n) { return s + n.Por_Reembolsar; }, 0);
+  resumen.Reembolsado = nomina.reduce(function (s, n) { return s + n.Reembolsado; }, 0);
   resumen.Rendido = rendido;
-  resumen.Brecha = transferido - rendido;
+  resumen.Brecha = nomina.reduce(function (s, n) { return s + Math.max(0, n.Saldo); }, 0);
   resumen.Equipos_Instalados = equiposInstalados;
   resumen.Ordenes = estado.ordenes.length;
   resumen.Ordenes_Iniciadas = ordenesIniciadas;
@@ -257,11 +268,18 @@ function recalcularPlan(estado) {
       alertas.push({ nivel: a.nivel, origen: j.ID_Jornada, fecha: j.Fecha, texto: a.texto });
     });
   });
-  nomina.forEach(function (n) {
-    if (n.Horas_Extra > p.P_HORAS_EXTRA_SEMANA) {
+  var porSemana = {};
+  jornadas.forEach(function (j) {
+    var f = new Date(j.Fecha + 'T12:00:00Z');
+    f.setUTCDate(f.getUTCDate() - (f.getUTCDay() + 6) % 7);
+    j.Tecnicos.forEach(function (id) { var k = id + ':' + f.toISOString().slice(0, 10); porSemana[k] = (porSemana[k] || 0) + j.Horas_Extra; });
+  });
+  Object.keys(porSemana).forEach(function (k) {
+    var id = k.split(':')[0], horas = porSemana[k];
+    if (horas > p.P_HORAS_EXTRA_SEMANA) {
       alertas.push({
-        nivel: 'alto', origen: n.ID_Tecnico, fecha: '',
-        texto: n.Nombre + ' acumula ' + formatoHoras(n.Horas_Extra) + ' extra, sobre el tope semanal de ' + formatoHoras(p.P_HORAS_EXTRA_SEMANA)
+        nivel: 'alto', origen: id, fecha: k.split(':')[1],
+        texto: tecnicosPorId[id].Nombre + ' acumula ' + formatoHoras(horas) + ' extra en esa semana, sobre el tope de ' + formatoHoras(p.P_HORAS_EXTRA_SEMANA)
       });
     }
   });
@@ -277,25 +295,27 @@ function recalcularPlan(estado) {
     });
   }
 
-  /* Costo por comuna: prorrateo contable del corredor segun equipos, traslados incluidos.
-     No es un costo geografico exacto y la interfaz lo declara. */
-  var porComuna = {};
-  jornadas.forEach(function (j) {
-    var n = j.Tecnicos.length;
-    var costo = j.Combustible + j.Peaje + j.Desgaste
-      + (j.Estipendio * n) + (j.Hotel * n) + (j.Costo_Horas_Extra * n);
-    var destinosConEquipos = j.Sesiones.length ? j.Sesiones : j.Comunas;
-    if (!destinosConEquipos.length) { return; }
-    var equiposJornada = j.Equipos || destinosConEquipos.length;
-    destinosConEquipos.forEach(function (idDestino) {
-      var d = destinosPorId[idDestino];
-      if (!d) { return; }
-      var equiposDestino = 0;
-      j.Tramos.forEach(function (t) { if (t.Destino === idDestino) { equiposDestino += t.Equipos; } });
-      var peso = equiposJornada > 0 ? (equiposDestino || 1) / equiposJornada : 1 / destinosConEquipos.length;
-      porComuna[d.Comuna] = (porComuna[d.Comuna] || 0) + costo * peso;
+  /* Prorrateo de cada viaje completo, incluido retorno, reserva y redondeo.
+     La reserva individual se distribuye proporcionalmente a su base por jornada. */
+  var porComuna = {}, viajes = {};
+  function distribuir(viaje) {
+    var totalEquipos = Object.keys(viaje.equipos).reduce(function (s, id) { return s + viaje.equipos[id]; }, 0);
+    if (!totalEquipos) { porComuna['Traslados sin instalaci\u00f3n'] = (porComuna['Traslados sin instalaci\u00f3n'] || 0) + viaje.costo; return; }
+    Object.keys(viaje.equipos).forEach(function (id) { var nombre = destinosPorId[id].Comuna; porComuna[nombre] = (porComuna[nombre] || 0) + viaje.costo * viaje.equipos[id] / totalEquipos; });
+  }
+  jornadas.slice().sort(function (a, b) { return a.Fecha.localeCompare(b.Fecha); }).forEach(function (j) {
+    var viaje = viajes[j.ID_Vehiculo] || {costo:0,equipos:{}};
+    viaje.costo += j.Desgaste + j.Costo_Horas_Extra * j.Tecnicos.length;
+    j.Tecnicos.forEach(function (id) {
+      var n = nomina.find(function (n) { return n.ID_Tecnico === id; });
+      var base = j.Estipendio + j.Hotel + (j.Conductor === id ? j.Combustible + j.Peaje : 0);
+      viaje.costo += base + (n.Base ? n.Reserva * base / n.Base : 0);
     });
+    j.Tramos.forEach(function (t) { if (t.Equipos) { viaje.equipos[t.Destino] = (viaje.equipos[t.Destino] || 0) + t.Equipos; } });
+    if (j.Tramos[j.Tramos.length - 1].Destino === 'BASE') { distribuir(viaje); delete viajes[j.ID_Vehiculo]; }
+    else { viajes[j.ID_Vehiculo] = viaje; }
   });
+  Object.keys(viajes).forEach(function (id) { distribuir(viajes[id]); });
 
   return {
     jornadas: jornadas,
@@ -320,7 +340,7 @@ function enlaceMaps(jornada, estado) {
   function punto(id) {
     if (id === 'BASE') { return BASE_OPERACIONES.Lat + ',' + BASE_OPERACIONES.Lng; }
     var d = destinosPorId[id];
-    return d ? d.Lat + ',' + d.Lng : null;
+    return d ? (Number.isFinite(d.Lat) && Number.isFinite(d.Lng) ? d.Lat + ',' + d.Lng : d.Direccion + ', ' + d.Region + ', Chile') : null;
   }
   var secuencia = [];
   jornada.Tramos.forEach(function (t, i) {
@@ -342,10 +362,11 @@ function enlaceMaps(jornada, estado) {
 }
 
 /* Propone el mejor equipo disponible y explica por que lo eligio. */
-function autoasignar(estado, plan, fecha, cantidadTecnicos) {
+function autoasignar(estado, plan, fecha, cantidadTecnicos, exceptoJornada) {
+  if (!Number.isInteger(cantidadTecnicos) || cantidadTecnicos < 1 || cantidadTecnicos > estado.parametros.P_CAPACIDAD_CAMIONETA) { return { ok: false, motivo: 'Cantidad de técnicos fuera de la capacidad del vehículo.' }; }
   var ocupados = {}, vehiculosOcupados = {};
   plan.jornadas.forEach(function (j) {
-    if (j.Fecha !== fecha) { return; }
+    if (j.Fecha !== fecha || j.ID_Jornada === exceptoJornada) { return; }
     j.Tecnicos.forEach(function (id) { ocupados[id] = j.ID_Jornada; });
     vehiculosOcupados[j.ID_Vehiculo] = j.ID_Jornada;
   });

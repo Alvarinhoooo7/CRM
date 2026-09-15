@@ -1,743 +1,418 @@
-# Servicio Técnico en Ruta
+# Servicio técnico en ruta
 
-> **Migración en curso a planilla funcional + AppSheet (14-09-2026).** La implementación nueva está en `apps-script/`; todavía no reemplaza la operación remota. Para continuar, leer [checklist detallado](ESTADO_IMPLEMENTACION.md), [especificación conciliada](docs/ESPECIFICACION_CONCILIADA.md), [instalación y corte](docs/OPERACION_Y_MIGRACION.md) y [configuración AppSheet](appsheet/CONFIGURACION_FUNCIONAL.md).
->
-> Pruebas locales: `node scripts/check-sintaxis.js`, `node tests/planilla.cjs`, `node tests/hojas.cjs`. El proyecto remoto recibió únicamente la función `prepararMigracionPlanillaFuncional` para respaldar el libro; conserva la aplicación anterior. El contenido que sigue documenta esa versión y se retirará al validar el corte.
+Software de planificación, ejecución y rendición para un servicio técnico que instala equipos
+de telecomunicaciones a lo largo de Chile. Tres interfaces con acceso propio —supervisor,
+coordinador y técnico— sobre un mismo motor de cálculo.
 
-**Estudio de caso 2 · Tecnología Aplicada a Sistemas Inteligentes · INACAP Sede Santiago Sur**
-Entrega: 14-09-2026 · Grupo de 4 integrantes
+El caso: **33 equipos en 16 comunas**, desde Copiapó hasta Santa Juana, con **10 técnicos** y
+**6 camionetas Peugeot Partner**. Cada instalación toma 2 h y cada capacitación 30 min, que
+bajan a 15 min si al cliente se le envía el video antes. Hay que calcular traslados, peajes,
+alojamiento y viáticos, y terminar sabiendo **cuánto dinero transferirle a cada técnico**.
 
-Sistema de planificación y control de instalaciones en terreno, construido sobre Google
-Sheets + Apps Script. La planilla es la base de datos, todo el cálculo ocurre en JavaScript
-y la interfaz es una aplicación web a la que cada técnico entra con un enlace.
+## Cómo se abre
 
-> **Este documento está escrito para que los cuatro integrantes puedan preparar la
-> presentación y el informe sin tener que leer código.** Cada sección indica qué decir,
-> con qué números respaldarlo y dónde verlo en pantalla.
+Doble clic en `demo/index.html`. No necesita servidor, ni instalación, ni internet.
 
----
+Si tu navegador bloquea el almacenamiento local en archivos (algunos lo hacen), la demo
+avisa y sigue funcionando: lo único que se pierde es el estado al recargar. Para evitarlo,
+sírvela por HTTP desde la carpeta `demo/`:
 
-# PARTE 1 · LO QUE HAY QUE ENTENDER
-
-## 1.1 El problema del caso
-
-Un servicio técnico presta servicio a una empresa de telecomunicaciones con equipos en todo
-Chile. Tiene **personal limitado**: 10 técnicos y 6 camionetas Peugeot Partner para cubrir
-el territorio nacional.
-
-Debe instalar **33 equipos en 16 localidades**, desde Copiapó por el norte hasta Tomé por el
-sur, trabajando en grupos de 3 personas.
-
-| Dato del enunciado | Valor |
-|---|---|
-| Técnicos disponibles | 10 |
-| Camionetas | 6, con sus herramientas |
-| Tiempo de instalación | 2 h por equipo |
-| Tiempo de capacitación | 30 min |
-| Rendimiento de la camioneta | 20 km/L |
-
-Lo que pide textualmente el enunciado:
-
-1. Calcular **trayecto, estadía y todo lo necesario** para la gestión.
-2. Determinar **cuánto dinero se requiere** para la planificación.
-3. Determinar **qué monto requiere cada técnico** para hacer su ruta.
-4. Indicar **cómo se resolvería el problema de la mejor manera**.
-5. Tomar **decisión sobre una futura mejora** (personal, camionetas u otro) justificándola.
-
-Y del caso 2: que cada técnico pueda **verificar su ruta, sus implementos, el hotel y la
-camioneta** desde una plataforma.
-
-## 1.2 Los 33 equipos
-
-| Región | Localidad | Equipos |
-|---|---|---:|
-| Atacama | Copiapó | 5 |
-| Coquimbo | Coquimbo | 2 |
-| Valparaíso | La Calera | 1 |
-| Valparaíso | San Antonio | 2 |
-| Metropolitana | Melipilla | 2 |
-| Metropolitana | Lo Barnechea | 3 |
-| Metropolitana | Puente Alto | 1 |
-| Metropolitana | Santiago | 3 |
-| Metropolitana | Pudahuel | 3 |
-| Metropolitana | Maipú | 3 |
-| Maule | Curicó | 1 |
-| Maule | Talca | 3 |
-| Biobío | San Pedro de la Paz | 1 |
-| Biobío | Penco | 1 |
-| Biobío | Tomé | 1 |
-| Biobío | Santa Juana | 1 |
-| **Total** | **16 localidades** | **33** |
-
-## 1.3 Las cuatro decisiones que definen el sistema
-
-Si un integrante solo alcanza a leer una sección, que sea esta. Son las cuatro cosas que
-distinguen este trabajo de llenar una planilla.
-
-### Decisión 1 · La planilla es mínima a propósito
-
-Solo tres pestañas visibles: `CONFIG`, `DESTINOS` y `PLAN`. Nada de columnas auxiliares ni
-fórmulas encadenadas.
-
-**Por qué:** una planilla con 40 columnas de fórmulas no se puede auditar y se rompe cuando
-alguien inserta una fila. Acá el motor lee por *rangos con nombre*, así que se pueden mover
-filas sin quebrar nada. El cálculo vive en JavaScript, donde se puede probar.
-
-### Decisión 2 · Todo lo configurable vive en un solo archivo
-
-`00_Esquema.gs` tiene **83 parámetros**, 12 tablas maestras y 29 reglas de validación. De
-ahí se generan solas la hoja `CONFIG`, las validaciones de celda y los formularios de la web.
-
-Cada parámetro declara su origen:
-
-- **PDF** — textual del enunciado. No se negocia.
-- **JEFATURA** — decisión nuestra, documentada.
-- **SUPUESTO** — supuesto declarado, hay que defenderlo en el informe.
-
-> Esto es lo que hace defendible el trabajo: cuando el docente pregunte "¿de dónde sacaste
-> ese número?", la respuesta está escrita al lado del número.
-
-### Decisión 3 · Se calculan dos escenarios sobre el mismo plan
-
-El enunciado dice que cada equipo lleva "su correspondiente capacitación". Nosotros
-proponemos capacitar **al cliente, no al equipo**: se le envía por correo un enlace de Drive
-con el material antes de la visita, y en terreno se dicta una sola sesión por sitio para
-resolver dudas concretas.
-
-| | Literal del enunciado | Como opera el servicio |
-|---|---|---|
-| Capacitaciones | 33 sesiones de 30 min | 16 sesiones de 15 min |
-| Horas | 16,5 h | 4,0 h |
-
-**Ahorro: 12,5 horas-hombre.** El sistema corre los dos escenarios sobre el mismo plan y
-muestra la diferencia. Eso convierte la propuesta en un número, no en una opinión.
-
-### Decisión 4 · El objetivo es costo mínimo, no tiempo mínimo
-
-Esto no es una carrera. Se acepta alargar el plan si eso lo abarata, con techo de 20 días
-hábiles. Se atienden primero los destinos lejanos agrupados por corredor, y la Región
-Metropolitana al final con días cortos y sin hotel.
-
----
-
-# PARTE 2 · CÓMO SE CALCULA CADA COSA
-
-Esta parte es el corazón del informe. Cada regla tiene su fórmula y un ejemplo.
-
-## 2.1 Paralelización: la regla que más se malinterpreta
-
-Tres técnicos en un sitio instalan tres equipos **al mismo tiempo**, no uno tras otro.
-
-```
-horas_instalación = redondear_hacia_arriba(equipos ÷ técnicos) × 2 h
+```bash
+python -m http.server 8777
+# luego abre http://localhost:8777/index.html
 ```
 
-| Situación | Cálculo | Resultado |
+### Accesos
+
+Los tres vienen autocompletados: eliges el rol y aprietas **Ingresar**.
+
+| Vista | Correo | Contraseña |
 |---|---|---|
-| 3 equipos, 3 técnicos | techo(3/3) × 2 h | **2 h**, no 6 h |
-| 5 equipos, 3 técnicos | techo(5/3) × 2 h | **4 h** (dos vueltas) |
-| 5 equipos, 6 técnicos | techo(5/6) × 2 h | **2 h** (una vuelta) |
-| 1 equipo, 3 técnicos | techo(1/3) × 2 h | **2 h** (sobran manos) |
+| Supervisor | `supervisor@serviciotecnico.cl` | `123` |
+| Coordinador | `coordinador@serviciotecnico.cl` | `123` |
+| Técnico | `alvaro.fuentes@serviciotecnico.cl` | `123` |
 
-Con la capacitación de 15 min, una visita de 3 equipos son **2 h 15 min**.
+También entra el correo de cualquiera de los 10 técnicos (`nombre.apellido@serviciotecnico.cl`).
 
-> **Para la presentación:** este es el punto donde la mayoría se equivoca y multiplica 33
-> equipos × 2 h = 66 h. Está mal: depende de cuánta gente se mande.
+> Esto **no es un sistema de autenticación**. Es un selector de rol con las credenciales
+> impresas en pantalla, para que la demostración fluya. No protege ningún dato.
 
-## 2.2 El trabajo se ejecuta en la primera visita
+El botón **Reiniciar demo**, en la barra superior, devuelve todo al plan inicial.
 
-Una localidad instala **la primera vez** que se llega. Volver a pasar por esa ciudad
-(pernocte de regreso, parada técnica) son 0 equipos y 0 capacitaciones.
+## Qué muestra el plan inicial
 
-**Si llegan varias cuadrillas el mismo día, todas trabajan** y se reparten los equipos en
-proporción a su dotación. Seis técnicos en Copiapó terminan los 5 equipos en 2,25 h en vez
-de 4,25 h.
-
-## 2.3 Cuánta gente mandar
-
-No hay límite de personas ni de camionetas hacia un destino. El **único límite real es de
-comodidad: 3 personas por camioneta** con sus bolsos. Si hace falta más gente, se mandan más
-camionetas.
-
-Pero mandar más gente no siempre conviene:
-
-| Dotación en Copiapó | Tiempo en sitio | Horas-hombre |
-|---|---:|---:|
-| 3 técnicos (1 camioneta) | 4,25 h | 40,05 |
-| 6 técnicos (2 camionetas) | **2,25 h** | **68,1** |
-
-Baja el reloj, sube el costo. El sistema muestra las dos cifras y avisa para que se decida
-con datos.
-
-## 2.4 Horas extra contra hotel
-
-**Esta es la decisión económica central del trabajo.**
-
-```
-Pernoctar (3 técnicos):  3 hotel + 3 viáticos del día siguiente = $225.000
-2 h extra (3 técnicos):  3 × 2 h × $6.500 × 1,5                 =  $58.500
-```
-
-Un ejemplo real que calcula el sistema, destino a 4 h con 3 equipos:
-
-| Alternativa | Sobretiempo | Hotel | Viático | **Total** |
-|---|---:|---:|---:|---:|
-| **Ida y vuelta el mismo día** | $54.112 | $0 | $75.000 | **$379.113** |
-| Con una noche fuera | $0 | $150.000 | $150.000 | $550.000 |
-| Con 2 noches fuera | $0 | $300.000 | $225.000 | $775.000 |
-
-**Ahorro por apretar el día: $170.887.**
-
-Por eso `SOBRETIEMPO` no es una falla en el semáforo: es una decisión. La línea roja es
-`FUERA DE LEY` a las **10,4 h** (jornada contractual de 8,4 h + 2 h extra legales), y ese
-límite no se negocia por ahorro. También se controla el tope de 10 h extra semanales por
-técnico.
-
-## 2.5 El semáforo de jornada
-
-| Estado | Límite | Significado |
-|---|---|---|
-| **OK** | ≤ 7,4 h | Dentro de la jornada efectiva |
-| **TOLERANCIA** | ≤ 8,4 h | Se absorbe con el banco de horas |
-| **SOBRETIEMPO** | ≤ 10,4 h | Horas extra pagadas con 50% de recargo |
-| **FUERA DE LEY** | > 10,4 h | Debe ser cero. Replanificar |
-
-La jornada de 7,4 h sale de: 42 h semanales (Ley 21.561) − 5 h de colación = 37 h efectivas
-÷ 5 días.
-
-## 2.6 Peajes: sumados plaza por plaza
-
-El sistema tiene el catálogo MOP 2026 completo: **65 plazas y pórticos**, con la tarifa de
-categoría 1 (auto y camioneta). El peaje de un viaje es la **suma de las plazas que se
-cruzan**, no una estimación.
-
-**Validación del método:** la suma de los 8 pórticos de la Ruta 78 hasta San Antonio da
-**$4.008**, y la guía MOP declara **~$4.010** para ese destino.
-
-Si dos localidades comparten corredor, solo se cobran las plazas que las separan. Por eso
-**Talca → Curicó cuesta $0** en peaje: esas plazas ya se pagaron al bajar.
-
-## 2.7 Cuándo conviene rodear un peaje
-
-Cada tramo se consulta **dos veces** a Google Maps: con y sin peajes. La decisión depende de
-dónde cae el tiempo adicional:
-
-| Situación | Costo de la hora de rodeo |
-|---|---|
-| Cabe en la jornada | **$0** — el técnico ya estaba contratado |
-| Excede la jornada | Hora extra con recargo, por cada técnico |
-| Obliga a pernoctar | Hotel + viático del día siguiente |
-
-Ejemplo del sistema, **mismo tramo a Melipilla**:
-
-- Día recién empezado → **va por fuera**, ahorra $783
-- Ya llevan 8 h → **va por autopista**, el rodeo costaría $17.550 en horas extra
-
-Hay dos frenos: `P_RODEO_MAX_HORAS` (0,75 h) descarta rodeos largos aunque sean más baratos,
-porque un desvío de tres horas en ruta interurbana es carretera secundaria sin doble vía ni
-bencineras, con la camioneta cargada. Y `P_RODEO_AHORRO_MINIMO` ($3.000) evita rodear por
-ahorrar $33.
-
-## 2.8 El costo de cada peso
-
-| Concepto | Fórmula | Nota |
-|---|---|---|
-| Combustible | km ÷ 20 × $1.381 | Rendimiento del enunciado |
-| Peajes | suma de plazas cruzadas | Catálogo MOP, categoría 1 |
-| Desgaste | km × $60 | Lo paga la empresa, no el técnico |
-| Hotel | noches × técnicos × $50.000 | Por persona, cualquier ciudad |
-| Viático | días × técnicos × $25.000 | Una vez al día, **incluye colación** |
-| Horas extra | horas × técnicos × $6.500 × 1,5 | Recargo legal del 50% |
-| Taxi en destino | km × $1.000 | **No se arrienda vehículo** |
-| Imprevistos | subtotal × 10% | El "y otros" que pide el enunciado |
-
----
-
-# PARTE 3 · BUS Y AVIÓN: EL ANÁLISIS QUE MÁS VALE
-
-## 3.1 Las herramientas caben en un bolso
-
-Todo lo que se necesita para instalar cabe en un **bolso de herramientas común, uno por
-técnico**: taladro, destornilladores, crimpeadora, multímetro, tester de red y repuestos
-menores.
-
-Esto importa porque significa que **la cuadrilla no depende de la camioneta para trabajar**:
-puede viajar en bus o en avión. Lo único que no cabe en un bolso es la **escalera
-telescópica**; si el trabajo la exige, ese destino se hace en camioneta sí o sí.
-
-El checklist de la orden de servicio está dividido en tres categorías por esa razón:
-
-- **BOLSO** (8 ítems) — viaja en bus o avión sin problema
-- **VEHÍCULO** (4) — escalera, conos, documentos del vehículo
-- **PERSONAL** (5) — EPP, celular, documentos del cliente
-
-## 3.2 El tiempo de vuelo no es el tiempo del viaje
-
-**Este es el error que comete casi todo el mundo al comparar.**
-
-| Etapa | Horas |
+| Indicador | Valor |
 |---|---:|
-| De la base al aeropuerto | 0,75 |
-| Check-in y embarque | 2,00 |
-| **Vuelo** | **1,60** |
-| Desembarque y retiro de bolsos | 0,50 |
-| Del aeropuerto de destino a la ciudad | 0,75 |
-| **Total puerta a puerta** | **5,60** |
+| Equipos previstos | 33 |
+| Comunas / capacitaciones | 16 / 16 |
+| Jornadas / órdenes de trabajo | 15 / 30 |
+| Filas de checklist | 510 |
+| Kilómetros | 3.769 |
+| Combustible | $260.222 |
+| Peajes | $118.325 |
+| Viáticos (22 técnico-días) | $550.000 |
+| Colaciones (8 técnico-días) | $40.000 |
+| Hotel (14 noches persona) | $700.000 |
+| Reserva de emergencia 10% | $171.453 |
+| **Nómina a transferir** | **$1.840.000** |
+| Desgaste de vehículos | $226.116 |
+| Horas extra | $79.035 |
+| **Costo presupuestado total** | **$2.145.151** |
 
-Volar a Copiapó son 5,6 h, no 1,6 h. **El vuelo es apenas el 29% del viaje.**
-
-El check-in es de 2 h y no de 1 h porque las herramientas obligan a facturar equipaje, y las
-aerolíneas cierran el mostrador 40 minutos antes del vuelo.
-
-## 3.3 El precio del pasaje no es el costo del viaje
-
-Las herramientas **no pueden ir en cabina**: taladros, alicates y destornilladores están
-prohibidos en el equipaje de mano por seguridad aérea. Hay que facturar equipaje, y las
-tarifas que se ven en internet **no lo incluyen**.
-
-Copiapó, ida y vuelta, cuadrilla de 3:
-
-| Concepto | Monto |
-|---|---:|
-| Pasajes (3 personas × 2 tramos × $85.000) | $510.000 |
-| Equipaje de bodega (3 bolsos × 2 tramos × $18.000) | $108.000 |
-| Taxi a los aeropuertos (4 carreras de 12 km) | $48.000 |
-| Taxi dentro de la ciudad (2 días × 20 km) | $40.000 |
-| **Transporte** | **$706.000** |
-
-Contra **$267.774** de combustible, peaje y desgaste en camioneta.
-
-## 3.4 Resultado: la camioneta gana en los 16 destinos
-
-| Localidad | Eq | Mejor opción | Costo | Programación |
-|---|---:|---|---:|---|
-| Santiago | 3 | Camioneta | $78.679 | Ida y vuelta el mismo día |
-| Maipú | 3 | Camioneta | $81.025 | Ida y vuelta el mismo día |
-| Puente Alto | 1 | Camioneta | $81.398 | Ida y vuelta el mismo día |
-| Lo Barnechea | 3 | Camioneta | $83.674 | Ida y vuelta el mismo día |
-| Pudahuel | 3 | Camioneta | $83.954 | Ida y vuelta el mismo día |
-| Melipilla | 2 | Camioneta | $96.696 | Ida y vuelta el mismo día |
-| San Antonio | 2 | Camioneta | $109.342 | Ida y vuelta el mismo día |
-| La Calera | 1 | Camioneta | $115.620 | Ida y vuelta el mismo día |
-| Curicó | 1 | Camioneta | $136.602 | Ida y vuelta el mismo día |
-| Talca | 3 | Camioneta | $153.120 | Ida y vuelta el mismo día |
-| Coquimbo | 2 | Camioneta | $448.474 | Con una noche fuera |
-| Santa Juana | 1 | Camioneta | $461.639 | Con una noche fuera |
-| San Pedro de la Paz | 1 | Camioneta | $467.570 | Con una noche fuera |
-| Penco | 1 | Camioneta | $470.672 | Con una noche fuera |
-| Tomé | 1 | Camioneta | $475.060 | Con una noche fuera |
-| Copiapó | 5 | Camioneta | $792.774 | Con 2 noches fuera |
-
-**La razón es simple y vale la pena decirla en la presentación:** el pasaje se multiplica por
-cada persona, mientras que el costo de la camioneta es el mismo vayan uno o tres. Con
-cuadrillas de 3, el avión parte con una desventaja de 6 pasajes.
-
-**A qué precio cambiaría la respuesta:** el avión a Copiapó gana solo si la tarifa baja de
-**$52.462** por persona por tramo. Con tarifas *low cost* compradas con anticipación
-($30.000–$40.000 en SKY o JetSMART), **el avión sí ganaría**. Por eso las tarifas de la tabla
-están marcadas como *referenciales*: hay que cotizar antes de decidir.
-
-> **Este es el hallazgo más honesto del trabajo:** el sistema no asume que la camioneta es
-> mejor, lo calcula. Y entrega el umbral exacto a partir del cual la respuesta cambia.
+Estos montos **no están escritos en el código**: los calcula el motor y cambian en cuanto se
+crea una orden, se envía una capacitación o se edita un parámetro.
 
 ---
 
-# PARTE 4 · GUION DE LA PRESENTACIÓN (15 MINUTOS)
+# Vista supervisor
 
-El PDF pide 15 minutos con descuento por minuto adicional, máximo 4 personas. Propuesta de
-reparto, un bloque por integrante.
+Escritorio. Seis pestañas.
 
-## Integrante 1 · Caso y enfoque (3 min)
+## Pestaña Resumen
 
-**Qué decir:**
-- El problema: 33 equipos, 16 localidades, 10 técnicos, 6 camionetas.
-- Por qué no basta una planilla: el cálculo tiene reglas que las fórmulas de celda no
-  expresan bien (paralelización, primera visita, viático por técnico-día).
-- La decisión de arquitectura: planilla mínima de 3 hojas, cálculo en JavaScript, interfaz
-  web para que cada técnico vea lo suyo sin acceso a los datos de todos.
+Nueve indicadores arriba: costo presupuestado, a transferir, transferido, rendido, brecha por
+rendir, equipos instalados sobre 33, avance, horas extra y alertas críticas.
 
-**Qué mostrar:** pestaña **Resumen**, tarjetas de indicadores.
+**Cómo se compone el costo** — barras con combustible, peajes, viáticos, colaciones, hotel,
+reserva, horas extra y desgaste. El desgaste aparece porque es costo de empresa, pero no se
+le transfiere a nadie.
 
-**Número para cerrar:** *"33 equipos, 16 localidades, y el sistema dice exactamente cuánto
-cuesta y cuánto hay que transferirle a cada persona."*
+**Estado de la operación** — jornadas, órdenes, checklist completos, órdenes iniciadas y
+cerradas, capacitaciones, kilómetros, noches de hotel, horas planificadas y horas reales.
+Las horas reales se llenan solas a medida que los técnicos marcan hitos en el teléfono.
 
-## Integrante 2 · Cómo se planifica y se rutea (4 min)
+**Alertas** — ordenadas por gravedad. Rojo: se pasó un tope. Ámbar: algo que revisar. Gris:
+avisos. El motor **no descarta solo** una jornada que se pasa del tope; la deja planificada y
+la alerta, para que la decisión sea de una persona.
 
-**Qué decir:**
-- Los tres corredores: norte (Ruta 5 N), sur (Ruta 5 S) y Región Metropolitana.
-- La regla de paralelización con el ejemplo de 3 equipos / 3 técnicos = 2 h, no 6 h.
-- Peajes sumados plaza por plaza, con la validación contra el MOP: $4.008 vs $4.010.
-- La decisión de rodear o no: el mismo tramo a Melipilla da respuesta distinta según cuánta
-  jornada quede libre.
+## Pestaña Finanzas
 
-**Qué mostrar:** pestaña **Rutas y flota**, luego **Peajes** con el desglose por localidad.
+**Costo por comuna** — el costo completo del corredor se prorratea entre sus comunas según
+equipos, incluidos los traslados que no instalan nada. Es un reparto contable declarado, no un
+costo geográfico exacto, y la pantalla lo dice.
 
-**Número para cerrar:** *"Talca a Curicó cuesta $0 en peaje, porque el sistema sabe que esas
-plazas ya se pagaron."*
+**Detalle por jornada** — una fila por jornada: recorrido, equipo, km, horas, combustible,
+peaje, estipendio (viático o colación), hotel y horas extra. Con totales al pie. El número
+rojo junto al identificador es la cantidad de alertas de esa jornada.
 
-## Integrante 3 · La plata (4 min)
+## Pestaña Desempeño
 
-**Qué decir:**
-- Composición del gasto: hotel y viáticos pesan más que el combustible.
-- La decisión horas extra contra hotel, con el ejemplo de $54.112 vs $225.000.
-- La transferencia por técnico: qué incluye y qué no, y por qué no coincide con el gasto
-  total.
-- Bus y avión: por qué se evaluaron en serio, qué cuesta realmente un vuelo y a qué precio
-  cambiaría la decisión.
+Una fila por técnico: jornadas, horas planificadas, horas reales, desviación, checklist
+completos, órdenes cerradas, equipos instalados y cuántos hitos se marcaron dentro del sitio.
 
-**Qué mostrar:** pestaña **Gastos**, después **Transporte** con el detalle de Copiapó.
+Debajo, **carga horaria comparada**: barras por técnico, en ámbar las que generan horas extra.
+Sirve para ver de un vistazo que la carga está desbalanceada — Álvaro Fuentes hace 5 jornadas
+y Rodrigo Cáceres 2.
 
-**Número para cerrar:** *"Apretar un día de trabajo ahorra $170.887 frente a pagar una noche
-de hotel para tres personas."*
+Las horas reales salen de los hitos que marca el propio técnico. Una hora capturada por
+teléfono **no es certificación del servidor**: es lo que declaró el técnico.
 
-## Integrante 4 · El técnico y la mejora futura (4 min)
+## Pestaña Nómina
 
-**Qué decir:**
-- La orden de servicio: ruta, dirección exacta, hotel, vehículo, checklist e implementos.
-- Exportación a PDF y enlace directo por técnico.
-- Los dos escenarios de capacitación y las 12,5 horas de diferencia.
-- La decisión de mejora futura, respondiendo lo que pide el enunciado.
+La tabla que responde la pregunta del caso: cuánto se le transfiere a cada técnico y por qué.
+Columnas: viático, colación, hotel, combustible, peaje, base, reserva, total a transferir y
+rendido.
 
-**Qué mostrar:** pestaña **Orden de servicio** con T01, exportar el PDF en vivo.
+- Solo el **conductor** de cada jornada recibe combustible y peajes. Por eso Paulina Herrera
+  (T08) y Bárbara Neira (T10), que no tienen licencia, reciben bastante menos.
+- El importe individual es **base × 1,10, redondeado hacia arriba al millar**.
+- **Marcar pagado** simula la transferencia y mueve el indicador «Transferido» del resumen.
+  **Marcar todo** lo hace con los diez de una vez.
 
-**Número para cerrar:** *"El cuello de botella no es la gente ni los vehículos: es que la
-mitad del tiempo pagado se va en la carretera."*
+Al pie, el cierre del presupuesto: nómina + desgaste + horas extra = costo total.
 
-## Recomendaciones de forma (del PDF)
+## Pestaña Gastos
 
-- Verificar contrastes y tamaño de letra.
-- No poner grandes cantidades de texto: una idea y un número por lámina.
-- Lenguaje técnico y formal.
-- No se requiere vestimenta formal.
-- **Ensayar con cronómetro:** hay descuento por minuto adicional.
+Cola de comprobantes que suben los técnicos, con la foto adjunta. **Aprobar** suma el monto al
+rendido del técnico y cierra la brecha del resumen. **Rechazar** lo deja registrado sin sumar.
+Los gastos marcados como emergencia se pagan con la reserva del 10% y salen etiquetados.
 
----
+Al principio está vacía: se llena cuando un técnico sube una boleta desde el teléfono.
 
-# PARTE 5 · ESTRUCTURA DEL INFORME
+## Pestaña Parámetros
 
-El PDF pide formato carta, márgenes 2,5 cm, párrafos justificados con interlineado sencillo,
-fuente Arial o Calibri, títulos 14 en negrita, subtítulos 12 en negrita, texto 11 normal,
-APA7 recomendado, convertido a PDF.
+Diez parámetros editables: precio del diésel, rendimiento, desgaste por km, viático, colación,
+hotel, valor hora técnico, reserva, tiempo de instalación y de capacitación.
 
-## Índice propuesto
+Cambiar cualquiera **recalcula el plan completo al instante**. Es la demostración de que nada
+está cableado. Sube el diésel al doble y mira moverse el costo total sin que se toquen los
+peajes ni los viáticos.
 
-**1. Introducción**
-Contexto del servicio técnico, el problema de cobertura nacional con personal limitado y el
-objetivo del trabajo.
+Abajo, los **valores derivados** que se recalculan solos: jornada efectiva, jornada diaria,
+tope diario con horas extra, capacitación reducida y velocidades por corredor.
 
-**2. Descripción del caso**
-Los 33 equipos, las 16 localidades, los recursos disponibles. Tabla de requerimientos.
+**Volver a los valores de la semilla** deshace los cambios.
 
-**3. Metodología**
+## Imprimir informe
 
-- 3.1 Supuestos declarados y su origen (la tabla de la sección 6.2 de este documento)
-- 3.2 Herramienta construida: arquitectura de tres hojas y motor en JavaScript
-- 3.3 Fuentes de datos: Google Maps para trayectos, catálogo MOP 2026 para peajes
-
-**4. Planificación de la operación**
-
-- 4.1 Agrupación por corredores
-- 4.2 Conformación de cuadrillas y asignación de vehículos
-- 4.3 Regla de paralelización y tiempos en sitio
-- 4.4 Programación de jornadas y criterio de pernoctación
-
-**5. Análisis de costos**
-
-- 5.1 Composición del gasto total
-- 5.2 Costo por localidad y por equipo instalado
-- 5.3 Transferencia requerida por técnico
-- 5.4 Comparación de modos de transporte
-- 5.5 Análisis de sensibilidad: umbral de tarifa aérea
-
-**6. Propuesta de mejora**
-
-- 6.1 Diagnóstico: el traslado como cuello de botella
-- 6.2 Capacitación digital previa
-- 6.3 Evaluación de alternativas de inversión
-- 6.4 Recomendación y justificación
-
-**7. Gestión tecnológica (caso 2)**
-La aplicación web, la vista por técnico, la orden de servicio y el checklist.
-
-**8. Conclusiones**
-
-**9. Referencias** (APA7)
-
-**10. Anexos**
-Capturas del sistema, tabla completa de peajes, plan detallado por tramo.
-
-## Referencias sugeridas en APA7
-
-```
-Ministerio de Obras Públicas, Dirección General de Concesiones. (2026).
-    Tarifas de peajes y pórticos 2026. Gobierno de Chile.
-
-Biblioteca del Congreso Nacional de Chile. (2023). Ley 21.561: Reduce la jornada
-    laboral a 40 horas semanales. https://www.bcn.cl
-
-Dirección del Trabajo. (2024). Código del Trabajo: jornada ordinaria y horas
-    extraordinarias. Gobierno de Chile.
-
-Google. (2026). Google Maps Platform: Routes API documentation.
-    https://developers.google.com/maps/documentation/routes
-```
+El botón de la barra abre el diálogo de impresión con una hoja de estilos propia: sin barra,
+sin pestañas, sin botones. Sirve como anexo entregable.
 
 ---
 
-# PARTE 6 · RESPALDO PARA LAS PREGUNTAS
+# Vista coordinador
 
-## 6.1 Preguntas que el docente probablemente haga
+Escritorio. Seis pestañas.
 
-**¿Por qué el gasto total no coincide con la suma de las transferencias?**
-Porque son cosas distintas. El gasto total incluye lo que paga la empresa directamente:
-desgaste del vehículo, peajes con TAG corporativo, horas extra. La transferencia solo
-incluye lo que el técnico saca de su bolsillo: viáticos, hotel y una holgura para
-imprevistos.
+## Pestaña Órdenes
 
-**¿Por qué 3 equipos con 3 técnicos son 2 horas y no 6?**
-Porque trabajan en paralelo: cada uno toma un equipo distinto. La fórmula es
-`techo(equipos ÷ técnicos) × 2 h`. Con 5 equipos y 3 técnicos son dos vueltas, o sea 4 h.
+Seis indicadores y la tabla completa de las 30 órdenes: fecha, jornada, recorrido, técnico,
+si conduce o acompaña, avance del checklist, estado, hora de inicio, hora de fin y equipos
+instalados.
 
-**¿Los peajes son reales?**
-Salen del catálogo MOP 2026 para categoría 1. El método está validado: la suma de los
-pórticos de la Ruta 78 reproduce el total oficial que publica el MOP. **Pero 14 de 17 rutas
-están marcadas ESTIMADO** porque la secuencia de plazas se armó por geografía y no se ha
-contrastado contra una cartola real del TAG. El sistema muestra ese estado y nunca presenta
-un estimado como si fuera auditado.
+**Exportar nómina de transferencias (CSV)** descarga un archivo con técnico, RUT de
+demostración, correo, monto, reserva y detalle, listo para subir al banco. Los RUT son
+ficticios con dígito verificador válido; no corresponden a ninguna persona.
 
-**¿Por qué no usan el avión si es más rápido?**
-Se evaluó en serio. El avión ahorra un día entero a Copiapó, pero cuesta $973.000 contra
-$792.774 en camioneta, porque el pasaje se multiplica por cada persona y hay que pagar
-equipaje de bodega para las herramientas. El sistema calcula el umbral: con tarifas bajo
-$52.462 por persona por tramo, el avión ganaría.
+Abajo, las alertas del plan.
 
-**¿Es un óptimo global?**
-No, y hay que decirlo. El motor **evalúa** el plan que se le ingresa y elige la
-programación más barata para cada viaje, pero no resuelve un problema de ruteo óptimo tipo
-VRP. Es una herramienta de decisión, no un solver.
+## Pestaña Nueva orden
 
-**¿Se instalaron los equipos?**
-No. Son equipos planificados, presupuestos estimados y montos referenciales. No hay
-instalaciones ejecutadas ni transferencias bancarias reales.
+El formulario del caso:
 
-## 6.2 Supuestos que hay que declarar en el informe
-
-| Supuesto | Valor | Justificación |
-|---|---|---|
-| Precio del diésel | $1.381/L | Promedio nacional. Verificar antes de planificar |
-| Desgaste y mantención | $60/km | Neumáticos, aceite, filtros prorrateados |
-| Costo hora-técnico | $6.500/h | Sueldo bruto más cargas. **Ajustar al real** |
-| Jornada semanal | 42 h | Ley 21.561 vigente en 2026 |
-| Tarifa de taxi | $1.000/km | Promedio de referencia para regiones |
-| Equipaje de bodega | $18.000 por tramo | Tarifa habitual de cabotaje |
-| Factor de corrección de tiempo | 1,10 | Maps cronometra auto liviano sin paradas |
-| Tarifas de bus y avión | Referenciales | **Cotizar antes de comprometer** |
-
-Los valores de hotel ($50.000/noche) y viático ($25.000/día) son definidos por jefatura y no
-son supuestos.
-
-## 6.3 Lo que el sistema NO sabe
-
-Decirlo en el informe suma, no resta:
-
-1. **Las secuencias de plazas marcadas ESTIMADO** no están contrastadas contra un total
-   oficial. Se corrigen con la primera cartola del TAG.
-2. **Los peajes urbanos de Santiago** dependen de qué autopista tome el técnico. Se modelan
-   por kilómetro recorrido y siempre son evitables: por calle se paga $0.
-3. **Las tarifas de bus y avión** son referenciales.
-4. **No hay confirmación de disponibilidad** de hoteles, vuelos ni buses.
-
----
-
-# PARTE 7 · CÓMO USAR EL SISTEMA
-
-## 7.1 Puesta en marcha
-
-1. Abrir la Sheet → **Extensiones → Apps Script**
-2. Ejecutar **`configurarAcceso`** una vez (define correo y clave)
-3. Autorizar los permisos que pide Google
-4. Recargar la hoja. Aparece el menú **⚙ Servicio Técnico**
-5. **Crear o restaurar hojas base** → genera `CONFIG`, `DESTINOS` y `PLAN`
-6. **Actualizar rutas con Google Maps** → consulta kilómetros y tiempos reales
-7. **Recalcular y validar plan** → verifica que no haya errores
-
-## 7.2 Publicar la aplicación web
-
-**Implementar → Nueva implementación → Aplicación web**
-
-- Ejecutar como: **Yo**
-- Quién tiene acceso: **Cualquier persona con el enlace**
-
-Así el técnico nunca necesita permisos sobre la planilla. Cada uno puede entrar directo a lo
-suyo:
-
-```
-<URL>?vista=orden&tecnico=T01
-```
-
-## 7.3 Las pestañas de la aplicación
-
-| Pestaña | Para qué sirve |
+| Campo | Qué es |
 |---|---|
-| **Resumen** | La foto completa: cuánto sale, cuántos equipos, qué alertas hay |
-| **Gastos** | En qué se va la plata y cuánto transferirle a cada técnico |
-| **Técnicos** | Carga de trabajo y utilización por persona |
-| **Calendario** | Quién está ocupado y cuántas horas libres quedan |
-| **Transporte** | Camioneta, bus o avión: cuál conviene y por qué |
-| **Peajes** | Catálogo MOP y desglose por localidad |
-| **Orden de servicio** | La hoja de ruta imprimible de cada técnico |
-| **Rutas y flota** | El recorrido completo por cuadrilla |
-| **Planificación** | Donde se edita el plan |
-| **Guía del equipo** | Manual, glosario y cómo se calcula cada cosa |
+| Empresa | Cliente que contrata |
+| Región | Desplegable de 6 regiones |
+| Comuna | Desplegable dependiente de la región |
+| Calle | Texto libre |
+| Número | Texto libre |
+| Nombre del cliente | Contacto en terreno |
+| Correo del cliente | Para enviarle después la capacitación |
+| Equipos a instalar | Cuántos |
+| Fecha | Propone el próximo día hábil con holgura |
+| Técnicos a enviar | 1, 2 o hasta 3 |
+| Km desde la base | Se rellena solo |
+| Peaje por trayecto | Se rellena solo |
 
-> Cada pestaña tiene arriba una tarjeta **"¿Qué es esta pantalla?"** que explica qué se ve,
-> cómo leerlo y qué hacer. La pestaña **Guía** tiene el glosario completo de 22 términos.
+Si la comuna ya está en la tabla de destinos, los kilómetros y el peaje salen de la consulta
+real a Google Maps y del catálogo de plazas MOP que trae la semilla. Si es una comuna nueva,
+se propone la referencia de la región y la nota bajo el formulario lo advierte para que la
+corrijas.
 
-## 7.4 Verificar que todo funciona
+**El flujo es en dos pasos.**
 
-Ejecutar **`ejecutarPruebas`** desde el editor de Apps Script. Comprueba los 33 equipos, las
-16 localidades, la regla de paralelización, el peaje contra el MOP y que ningún técnico
-quede sin monto de transferencia.
+**Simular** no escribe nada: calcula sobre una copia del estado y muestra recorrido, equipo,
+conductor, camioneta, kilómetros, horas de viaje, de instalación y de capacitación, horas
+totales, noches de hotel, combustible, peajes, estipendio, hotel y costo de la jornada. Si hay
+advertencias, las lista. **Si alguna es crítica, el botón Confirmar queda deshabilitado.**
 
-## 7.5 Sincronizar cambios de código
+**Autoasignar equipo** propone la mejor cuadrilla disponible y **explica por qué la eligió**:
+quién conduce y por qué, quién acompaña y qué camioneta toca.
 
-```bash
-cd v2/apps-script
-clasp push
-```
+**Confirmar y crear órdenes** recién entonces crea la jornada y una orden por técnico, cada una
+con sus 17 ítems de checklist sin marcar.
 
-`clasp push` solo actualiza el código: no ejecuta funciones ni modifica las hojas.
+Abajo aparecen los trabajos ingresados en la sesión.
 
-Si es la primera vez en este computador:
+## Pestaña Asignación
 
-```bash
-npm install -g @google/clasp
-clasp login                 # abre el navegador, se inicia sesión con la cuenta de la Sheet
-clasp status                # debe listar los 19 archivos de v2/apps-script
-clasp push
-```
+A la izquierda, las jornadas. Eliges una y a la derecha se arma su equipo.
 
-`clasp login` guarda la sesión en `~/.clasprc.json`. Ese archivo **no se versiona** y no debe
-compartirse: contiene el token de acceso a la cuenta de Google.
+**Los 10 técnicos son un pool**, no cuadrillas fijas. Puedes mandar uno solo, dos o hasta tres
+por camioneta. Cada ficha muestra si está libre ese día, cuántas horas acumula y si no tiene
+licencia. Al hacer clic se suma o se saca del equipo.
 
----
+**Quién conduce** — solo aparecen los del equipo que tienen licencia. El conductor es quien
+recibe combustible y peajes.
 
-# PARTE 7B · LA APLICACIÓN DEL TÉCNICO (APPSHEET)
+**Camioneta** — las seis, con su estado. Las que están en taller no se pueden elegir.
 
-Es la entrega del **estudio de caso 2**: la plataforma donde cada técnico verifica su ruta,
-sus implementos, el hotel y la camioneta. Corre sobre el mismo Google Sheets.
+**Guardar equipo** queda deshabilitado mientras haya un problema, y el problema se explica:
+equipo vacío, más de tres personas, sin conductor, conductor sin licencia, conductor fuera del
+equipo o falta la camioneta.
 
-El armado completo, tabla por tabla y fórmula por fórmula, está en
-**[`appsheet/README.md`](appsheet/README.md)**. Acá va solo cómo dejarla andando en el celular.
+Al guardar, **las órdenes siguen al equipo**: se borran las de quien salió y se crean las de
+quien entró, con checklist limpio.
 
-## 7B.1 Generar los datos
+**Autoasignar** rehace el equipo de esa jornada con el mismo criterio y explica su elección.
 
-```bash
-node appsheet/generar.cjs
-```
+Si mandas **un solo técnico** donde iban dos, las horas de instalación se duplican, porque la
+instalación es paralelizable. Con 5 equipos eso son 10 h y revienta el tope diario de 10 h 24
+min. El motor lo deja hacer y lo alerta.
 
-Escribe siete CSV en `appsheet/csv/`. Imprime además la cuadratura contra el PDF (33 equipos,
-16 localidades), el itinerario de las cinco cuadrillas y el desglose del dinero. **Si algún
-número de la presentación no calza, este comando es la fuente de verdad.**
+## Pestaña Calendario
 
-## 7B.2 Cargar el Sheet y crear la app
+Dos semanas laborales en columnas. Cada jornada es una tarjeta con identificador, camioneta,
+recorrido, equipo, horas y noches. Las que tienen alertas van con el borde rojo.
 
-1. Drive → nueva hoja de cálculo `Servicio Tecnico en Ruta · App`
-2. Por cada CSV: **Archivo → Importar → Subir → Insertar hojas nuevas**. La pestaña debe
-   quedar con el mismo nombre del archivo
-3. En `TECNICOS` y en `ORDENES`, reemplazar los correos `t01@servicioenruta.cl` por los
-   **Gmail reales** de los integrantes. Sin esto el filtro por usuario no se puede demostrar
-4. [appsheet.com](https://www.appsheet.com) → **Create → App → Start with existing data** →
-   elegir la hoja
-5. Seguir `appsheet/README.md` desde la sección 3: tipos de columna, fórmulas, filtro de
-   seguridad y vistas
+**Arrastra una tarjeta a otro día** para reprogramarla. Al soltarla se revalidan los topes y se
+recalcula el plan. Nunca se agenda sábado ni domingo.
 
-## 7B.3 Instalarla en el celular
+## Pestaña Flota
 
-**Opción A · aplicación nativa (la que conviene para la presentación)**
+Las seis camionetas: patente, modelo, kilómetros, próxima mantención —con aviso en ámbar si
+faltan menos de 1.000 km—, revisión técnica y estado.
 
-1. Instalar **AppSheet** desde Google Play o App Store
-2. Abrirla e iniciar sesión **con la misma cuenta de Google** que creó la app
-3. La app aparece en la lista. Se abre y queda disponible sin volver a buscarla
+Los tres botones cambian el estado: **Disponible**, **Reserva**, **Taller**.
 
-**Opción B · sin instalar nada**
+Al marcar una en taller aparece **Jornadas afectadas por el taller**, con las que quedaron sin
+vehículo. No se borran ni se reasignan solas: quedan visibles y alertadas para que la decisión
+sea explícita. Es la evidencia directa de cuánta holgura hay en la flota — hoy, una sola
+camioneta de reserva.
 
-En AppSheet, **Share → Copy app link**. Se abre ese enlace en el navegador del celular y se
-usa *Añadir a pantalla de inicio*. Queda con ícono propio y pantalla completa, como una app.
+## Pestaña Capacitación
 
-> Útil si un compañero no alcanza a instalar nada antes de presentar, o si el teléfono no
-> tiene espacio.
+A la izquierda se redacta: destino, correo del cliente, asunto y mensaje. A la derecha, la
+**vista previa** del correo tal como le llega al cliente, con el enlace de capacitación, y se
+actualiza mientras escribes.
 
-## 7B.4 Que la usen los compañeros
+**Enviar capacitación** deja el correo en la bandeja de Enviados y marca ese destino como
+capacitación digital enviada. **La sesión presencial baja de 30 a 15 minutos y el plan se
+recalcula al instante.**
 
-En el editor: **Users → Add users**, se agregan los Gmail de los integrantes y se les envía la
-invitación. Cada uno entra y, por el filtro de seguridad, ve **solo sus órdenes**.
+El panel **Efecto en el plan** dice exactamente cuánto se gana con las que faltan. Enviando
+las 16: **8 h menos de trabajo presencial y $26.612 menos de costo**.
 
-> **Ojo con la licencia.** El plan gratuito permite construir y usar la app con la cuenta que
-> la creó. Compartirla con otros usuarios normalmente requiere plan pago, salvo que la cuenta
-> tenga Workspace con AppSheet Core. **Verificarlo el día anterior, no el mismo día.**
->
-> Si no da la licencia: **la demostración se hace desde el teléfono del creador** y cumple
-> igual. Para mostrar el filtro por usuario basta con cerrar sesión y entrar con otra cuenta.
-
-## 7B.5 Antes de presentar
-
-| Revisar | Cómo |
-|---|---|
-| La app abre en el celular | Sin wifi de la sala: probar con datos móviles |
-| El filtro funciona | Entrar con dos cuentas distintas y comparar lo que ve cada una |
-| Las capturas están en la PPT | Los siete marcos punteados de `presentacion/` |
-| El respaldo | Exportar una orden a PDF por si falla la conexión |
-
-Si el proyector o la red fallan, se presenta con las capturas de la PPT y la planilla abierta.
-**Nunca depender de que haya internet en la sala.**
+Conviene entender por qué esas dos cifras no son proporcionales, porque es la pregunta que
+te pueden hacer: el ahorro en dinero sale **solo de las horas extra que se dejan de pagar**.
+Viáticos, hotel, combustible y peajes no dependen de cuánto dure la capacitación. Por eso
+enviar un link suelto puede no mover el costo ni un peso —si esa jornada no tenía sobretiempo—
+mientras que el tiempo del técnico sí se libera siempre.
 
 ---
 
-# PARTE 8 · ESTRUCTURA DEL REPOSITORIO
+# Vista técnico
 
-```
-CRM/
-├── README.md              ← este documento
-├── Estudio de caso 1.pdf
-├── GUIA_TARIFAS_CAMIONETAS_2026.md
-├── apps-script/           ← versión 1, histórica
-├── appsheet/              ← CASO 2: la app del técnico
-│   ├── README.md              Armado paso a paso en AppSheet
-│   ├── generar.cjs            Planifica y escribe los CSV
-│   └── csv/                   Las 7 tablas que se importan al Sheet
-├── presentacion/
-│   ├── generar_ppt.py         Genera la presentación
-│   └── Presentacion_Casos_1_y_2.pptx   21 láminas, guion de 13:55
-└── v2/
-    ├── README.md          ← documentación técnica detallada
-    └── apps-script/
-        ├── 00_Esquema.gs      Solo datos: 83 parámetros, 12 tablas, validaciones
-        ├── 01_Peajes.gs       Catálogo MOP 2026 y cálculo de peaje por tramo
-        ├── 02_Setup.gs        Construye las 3 hojas desde el esquema
-        ├── 03_Maps.gs         Rutas, comparador autopista vs. rodeo
-        ├── 04_Motor.gs        Motor de cálculo puro y testeable
-        ├── 05_Datos.gs        Traducción de celdas a objetos
-        ├── 06_Api.gs          Sesión y endpoints de la web
-        ├── 07_WebApp.gs       doGet, menú, PDF, pruebas
-        ├── 08_Editor.gs       Edición del plan desde la web
-        ├── 09_ConexionMaps.gs Diagnóstico de Google Maps
-        ├── 10_Agenda.gs       Órdenes agendadas
-        ├── Index.html         Estructura de la interfaz
-        ├── Estilos.html       CSS
-        ├── Scripts.html       JavaScript del navegador
-        └── Ayuda.html         Capa explicativa y glosario
-```
+Teléfono. Marco de celular centrado, completamente usable con el mouse. Arriba a la derecha,
+un desplegable permite entrar como cualquiera de los 10 técnicos sin volver al login.
 
-**Regla de oro del proyecto:** si un número, un umbral o una lista aparece escrito en
-cualquier archivo que no sea `00_Esquema.gs`, es un error. Todo lo configurable vive en el
-esquema.
+Cuatro pantallas en el menú inferior.
+
+## Mis órdenes
+
+Las órdenes asignadas a ese técnico, con fecha, estado, si conduce y el avance del checklist.
+Al tocar una se abre.
+
+## Orden
+
+**Esta pantalla está bloqueada hasta completar el checklist.** La orden se ve difuminada detrás
+de un candado que dice cuántos implementos faltan. Debajo, los 17 ítems en tres grupos:
+
+- **En el bolso (8)** — multímetro, crimpeadora y tester de red, kit de fibra óptica, taladro,
+  destornilladores, notebook, equipo de reemplazo, cinta y canaletas.
+- **En la camioneta (4)** — escalera, equipos del día, extensión y señalética, documentos y TAG.
+- **Sobre la persona (5)** — EPP, arnés, botiquín, celular cargado, tarjeta corporativa.
+
+Cada marca queda con su hora. Al completar los 17 se abre la orden entera:
+
+- Cliente, dirección, contacto, equipos y si la capacitación digital ya se envió.
+- Resumen de la jornada: kilómetros, horas de viaje, instalación, capacitación, total y
+  pernoctación.
+- **Abrir ruta en Google Maps** — arma el enlace con las **coordenadas** de toda la jornada
+  encadenadas como waypoints y lo abre en otra pestaña. Se usan coordenadas y no texto para que
+  Maps no geocodifique y no pueda equivocarse de dirección.
+- **Llamar al cliente** — enlace `tel:`.
+- **Iniciar trabajo** — registra la hora y la ubicación.
+- Al cerrar: equipos instalados, observaciones, **firma del cliente** dibujada con el mouse y
+  **foto de la instalación**. **Finalizar trabajo** registra la hora de término.
+
+Todo esto viaja al store y aparece de inmediato en las métricas del supervisor.
+
+> Para la presentación conviene abrir una orden con equipos. La primera de Álvaro Fuentes
+> (`O0001`, Base → Coquimbo) es un día de puro traslado: no tiene instalación ni capacitación.
+> La jornada de Copiapó, con 5 equipos, se ve mucho mejor.
+
+## Mi plata
+
+Lo que responde la pregunta del técnico: cuánto le transfieren y de dónde sale.
+
+Monto total arriba, luego el desglose —viáticos, colaciones, hotel, combustible, peajes y
+reserva—, después cuánto lleva rendido y aprobado, cuánto está por revisar y cuánto le queda.
+
+Abajo, destacada en ámbar, la **reserva de emergencia**: el 10% que va incluido en la
+transferencia y solo se puede usar en una emergencia —una pana, un peaje que no estaba, un
+imprevisto en ruta—. A quien no conduce se le explica por qué no recibe combustible ni peajes.
+
+## Gastos
+
+Subir comprobante: orden, tipo (viático, colación, peaje, combustible, hotel, otro), monto,
+casilla de emergencia y foto de la boleta. La foto se lee como imagen y queda de miniatura.
+
+Cada comprobante entra como **Pendiente** y va a la cola del supervisor. Abajo se ven todos los
+propios con su estado.
 
 ---
 
-## Aviso académico
+# Cómo está hecho
 
-Los nombres de técnicos, direcciones de clientes, hoteles, tarifas y dotación son ejemplos
-del caso de estudio. No son datos de operación real, reservas confirmadas ni cotizaciones
-vigentes. Los montos son presupuestos estimados: no hay transferencias bancarias ni
-instalaciones ejecutadas.
+```
+demo/
+  index.html            login y contenedor de las tres vistas
+  css/estilos.css       sistema visual
+  js/00_datos.js        semilla: destinos, técnicos, flota, implementos, jornadas, parámetros
+  js/01_motor.js        cálculo puro, sin DOM
+  js/02_estado.js       store, almacenamiento y notificación a las vistas
+  js/03_supervisor.js
+  js/04_coordinador.js
+  js/05_tecnico.js
+  js/06_app.js          login, enrutado y arranque
+  pruebas.cjs           cuadraturas del motor
+```
+
+**Un solo store, tres vistas encima.** Por eso lo que hace el técnico aparece en el supervisor:
+no son tres páginas sueltas.
+
+**Scripts clásicos, no módulos ES.** Sobre `file://` el navegador bloquea los módulos y `fetch`,
+pero sí permite `<script src>` hacia un archivo hermano. El orden de carga define los globales,
+igual que los archivos `.gs` del proyecto original.
+
+**Sin librerías ni CDN.** En `file://` y sin internet no carga nada externo, así que los
+gráficos son HTML y CSS, y la tipografía es Bahnschrift, que viene con Windows.
+
+**Flujo en una dirección:** acción → `despachar()` → `recalcularPlan()` → guardar → redibujar.
+Ninguna vista escribe en el estado ni llama al motor por su cuenta. El motor no toca el DOM ni
+el almacenamiento, y por eso se puede probar con `node`.
+
+## Las reglas que aplica el motor
+
+```
+horasViaje   = km / velocidad[corredor] × 1,1     urbano 36 · Ruta 78 69 · Ruta 5 80 km/h
+horasInstal  = equipos × 2 / técnicos en sitio     (paralelizable)
+horasCapac   = sesiones × (0,5 h → 0,25 h si el link ya se envió)
+combustible  = km / 20 × $1.381
+desgaste     = km × $60                            costo de empresa, no se transfiere
+estipendio   = $25.000 si sale de la RM · $5.000 si la jornada es íntegra RM
+hotel        = noches × $50.000 por persona
+horasExtra   = max(0, horas − 7,4) × $6.500 × 1,5  tope 2 h/día y 10 h/semana
+transferencia = base × 1,10, redondeo hacia arriba al millar
+```
+
+Además: solo el conductor recibe combustible y peajes; nadie sin licencia conduce; máximo 3
+por camioneta; nunca sábado ni domingo; una ida de más de 4 h obliga a pernoctar; y una jornada
+sobre el tope se alerta, no se descarta sola.
+
+## Pruebas
+
+```bash
+node demo/pruebas.cjs
+```
+
+38 comprobaciones de **reglas y cuadraturas**, no de montos fijos: que la suma de las
+transferencias individuales sea la nómina, que el costo total cierre, que nadie sin licencia
+conduzca, que duplicar el diésel duplique el combustible sin tocar peajes ni viáticos, que
+enviar el link reduzca la capacitación exactamente a la mitad, y que el enlace de Maps salga
+con coordenadas y waypoints.
+
+Los montos concretos cambian si se editan los tramos o los parámetros, y eso es correcto.
+
+## Datos
+
+Los kilómetros y peajes vienen de la caché de rutas del libro original —consultas reales a
+Google Maps— y del catálogo de plazas MOP 2026 categoría 1. Las coordenadas son aproximadas al
+centro de la dirección municipal y su único uso es abrir Maps en el punto correcto.
+
+Las rutas intercomunales de demostración (Copiapó → Coquimbo, Melipilla → San Antonio, el
+circuito de Concepción) son **supuestos**, no consultas Maps ni cartolas TAG.
+
+Los 10 técnicos son nombres de demostración y no corresponden a personas reales.
+
+## Lo que este software no hace
+
+Entrega los datos para decidir la mejora futura —costo por corredor, carga por técnico,
+jornadas que se quedan sin vehículo cuando una camioneta entra al taller— pero **la
+justificación escrita de esa decisión no la genera**. Esa es la parte que se argumenta en la
+presentación.
+
+El diseño completo, con las decisiones tomadas y por qué, está en
+`docs/superpowers/specs/2026-09-15-demo-local-crm-design.md`.

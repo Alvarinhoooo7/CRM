@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Servicio técnico en ruta</title>
+<link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+
+<div id="aplicacion"></div>
+<div id="avisos" class="mensaje oculto" role="status" aria-live="polite"></div>
+<div id="confirmacion" class="oculto"></div>
+
+<!-- Scripts clásicos, no módulos ES: sobre file:// el navegador bloquea los módulos.
+     El orden de carga define los globales, igual que los archivos .gs del proyecto. -->
+<script src="js/00_datos.js"></script>
+<script src="js/01_motor.js"></script>
+<script src="js/02_estado.js"></script>
+<script src="js/03_supervisor.js"></script>
+<script src="js/04_coordinador.js"></script>
+<script src="js/05_tecnico.js"></script>
+<script src="js/06_app.js"></script>
+
+</body>
+</html>
